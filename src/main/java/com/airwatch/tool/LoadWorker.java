@@ -86,7 +86,8 @@ public class LoadWorker extends AbstractVerticle {
             countError(ex);
             LOGGER.error("Error while connecting to remote host", ex);
         });
-        clientRequest.setChunked(true).end();
+        clientRequest.headers().addAll(HttpServer.headers);
+        clientRequest.end();
     }
 
     private void checkResponse(HttpClientResponse httpClientResponse) {

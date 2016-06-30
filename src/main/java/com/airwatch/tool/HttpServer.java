@@ -4,6 +4,7 @@ import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.rxjava.core.AbstractVerticle;
+import io.vertx.rxjava.core.MultiMap;
 import io.vertx.rxjava.ext.web.Router;
 import io.vertx.rxjava.ext.web.RoutingContext;
 import io.vertx.rxjava.ext.web.handler.BodyHandler;
@@ -40,9 +41,22 @@ public class HttpServer extends AbstractVerticle {
     public static AtomicLong openPingCount = new AtomicLong(0);
     public static AtomicLong openSyncCount = new AtomicLong(0);
     public static AtomicLong openItemOperationsCount = new AtomicLong(0);
+    public static MultiMap headers = null;
 
     @Override
     public void start() {
+        headers = MultiMap.caseInsensitiveMultiMap();
+        headers.add("Host", "10.44.72.188:443");
+        headers.add("X-MS-PolicyKey", "3973534767");
+        headers.add("Authorization", "bWFuaXNoOm1hbmlzaA==");
+        headers.add("Content-Type", "application/vnd.ms-sync.wbxml");
+        headers.add("Accept", "*/*");
+        headers.add("Content-Length", "0");
+        headers.add("Accept-Language", "en-us");
+        headers.add("Accept-Encoding", "gzip, deflate");
+        headers.add("MS-ASProtocolVersion", "14.1");
+        headers.add("User-Agent", "Apple-iPod5C1/1304.15");
+
         System.setProperty("logback.configurationFile", "logback.xml");
         int port = Integer.parseInt(System.getProperty("server.port", "8080"));
         io.vertx.rxjava.core.http.HttpServer server = vertx.createHttpServer(
@@ -55,7 +69,7 @@ public class HttpServer extends AbstractVerticle {
         vertx.setPeriodic(5000, doNothing -> {
             System.out.println("Open connections to remote server = " + openConnections
                     + ". Total requests = " + totalRequests + ". Success = " + successCount
-                    + ". Error = " + errorCount + ". Ping {" + totalPingCount + ", " + openPingCount + "}"
+                    + ". Error = " + errorCount + ". Error types with count = " + errorsType + ". Ping {" + totalPingCount + ", " + openPingCount + "}"
                     + ". Sync {" + totalSyncCount + ", " + openSyncCount + "}"
                     + ". ItemOperations {" + totalItemOperationsCount + ", " + openItemOperationsCount + "}"
                     + ". Non 200 response " + non200Response);
