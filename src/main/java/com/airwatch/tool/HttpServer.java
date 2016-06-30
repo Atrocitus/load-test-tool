@@ -22,6 +22,7 @@ import static io.vertx.core.impl.Arguments.require;
 public class HttpServer extends AbstractVerticle {
 
     public static final ConcurrentHashMap<String, AtomicLong> errorsType = new ConcurrentHashMap();
+    public static final ConcurrentHashMap<String, AtomicLong> non200Response = new ConcurrentHashMap();
     private static final Logger LOGGER = LoggerFactory.getLogger(HttpServer.class);
     public static AtomicLong openConnections = new AtomicLong(0);
     public static AtomicLong errorCount = new AtomicLong(0);
@@ -56,7 +57,8 @@ public class HttpServer extends AbstractVerticle {
                     + ". Total requests = " + totalRequests + ". Success = " + successCount
                     + ". Error = " + errorCount + ". Ping {" + totalPingCount + ", " + openPingCount + "}"
                     + ". Sync {" + totalSyncCount + ", " + openSyncCount + "}"
-                    + ". ItemOperations {" + totalItemOperationsCount + ", " + openItemOperationsCount + "}");
+                    + ". ItemOperations {" + totalItemOperationsCount + ", " + openItemOperationsCount + "}"
+                    + ". Non 200 response " + non200Response);
         });
     }
 
@@ -115,6 +117,7 @@ public class HttpServer extends AbstractVerticle {
         errorCount.set(0);
         successCount.set(0);
         errorsType.clear();
+        non200Response.clear();
     }
 
     private void stopLoadTest(final RoutingContext context) {

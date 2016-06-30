@@ -4,6 +4,7 @@ import io.vertx.core.http.HttpClientOptions;
 import io.vertx.rxjava.core.AbstractVerticle;
 import io.vertx.rxjava.core.http.HttpClient;
 import io.vertx.rxjava.core.http.HttpClientRequest;
+import io.vertx.rxjava.core.http.HttpClientResponse;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,7 +52,7 @@ public class LoadWorker extends AbstractVerticle {
     private void sendRequestToRemote() {
         HttpServer.openConnections.incrementAndGet();
         HttpServer.totalRequests.incrementAndGet();
-        int random = 1 + (int) (Math.random() * ((3 - 1) + 1));
+        int random = 1 + (int) (Math.random() * ((HttpServer.remotePaths.size() - 1) + 1));
         String uriPath = HttpServer.remotePaths.getString(random - 1);
         String uriPathLowercase = uriPath.toLowerCase(Locale.ENGLISH);
         final boolean ping = uriPathLowercase.contains("cmd=ping");
@@ -76,17 +77,10 @@ public class LoadWorker extends AbstractVerticle {
             clientRequest = createClient(uri).post(path);
         }
         clientRequest.toObservable().subscribe(httpClientResponse -> {
-            RxSupport.observeBody(httpClientResponse).subscribe(buffer -> {
-                // Got response from email server.
-                HttpServer.openConnections.decrementAndGet();
-                HttpServer.successCount.incrementAndGet();
-                decrementCommandCount(ping, sync);
-                LOGGER.info("Response from email server :: {}", httpClientResponse.statusCode());
-            }, ex -> {
-                decrementCommandCount(ping, sync);
-                countError(ex);
-                LOGGER.error("Error while connecting to remote host", ex);
-            });
+            checkResponse(httpClientResponse);
+            // Got response from email server.
+            HttpServer.openConnections.decrementAndGet();
+            decrementCommandCount(ping, sync);
         }, ex -> {
             decrementCommandCount(ping, sync);
             countError(ex);
@@ -95,10 +89,24 @@ public class LoadWorker extends AbstractVerticle {
         clientRequest.setChunked(true).end();
     }
 
+    private void checkResponse(HttpClientResponse httpClientResponse) {
+        if (httpClientResponse.statusCode() != 200) {
+            String statusCode = httpClientResponse.statusCode() + "";
+            AtomicLong non200Response = HttpServer.non200Response.get(statusCode);
+            if (non200Response == null) {
+                non200Response = new AtomicLong(0);
+            }
+            non200Response.incrementAndGet();
+            HttpServer.non200Response.put(statusCode, non200Response);
+        } else {
+            HttpServer.successCount.incrementAndGet();
+        }
+    }
+
     private void countError(Throwable ex) {
         String errorMessage = ex.getMessage();
         if (errorMessage == null) {
-            ex.getLocalizedMessage();
+            errorMessage = ex.getLocalizedMessage();
         }
         AtomicLong errorTypeCount = HttpServer.errorsType.get(errorMessage);
         if (errorTypeCount == null) {
@@ -106,6 +114,7 @@ public class LoadWorker extends AbstractVerticle {
         }
         errorTypeCount.incrementAndGet();
         HttpServer.errorsType.put(errorMessage, errorTypeCount);
+
         HttpServer.errorCount.incrementAndGet();
         HttpServer.openConnections.decrementAndGet();
     }
