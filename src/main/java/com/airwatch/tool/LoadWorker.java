@@ -58,13 +58,13 @@ public class LoadWorker extends AbstractVerticle {
         final boolean sync = uriPathLowercase.contains("cmd=sync");
         if (ping) {
             HttpServer.totalPingCount.incrementAndGet();
-            HttpServer.activePingCount.incrementAndGet();
+            HttpServer.openPingCount.incrementAndGet();
         } else if (sync) {
             HttpServer.totalSyncCount.incrementAndGet();
-            HttpServer.activeSyncCount.incrementAndGet();
+            HttpServer.openSyncCount.incrementAndGet();
         } else {
             HttpServer.totalItemOperationsCount.incrementAndGet();
-            HttpServer.activeItemOperationsCount.incrementAndGet();
+            HttpServer.openItemOperationsCount.incrementAndGet();
         }
         URI uri = URI.create(uriPath);
 
@@ -137,11 +137,11 @@ public class LoadWorker extends AbstractVerticle {
 
     private void decrementCommandCount(final boolean ping, final boolean sync) {
         if (ping) {
-            HttpServer.activePingCount.decrementAndGet();
+            HttpServer.openPingCount.decrementAndGet();
         } else if (sync) {
-            HttpServer.activeSyncCount.decrementAndGet();
+            HttpServer.openSyncCount.decrementAndGet();
         } else {
-            HttpServer.activeItemOperationsCount.decrementAndGet();
+            HttpServer.openItemOperationsCount.decrementAndGet();
         }
     }
 }

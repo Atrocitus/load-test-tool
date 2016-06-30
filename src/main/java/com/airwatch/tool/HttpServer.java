@@ -36,9 +36,9 @@ public class HttpServer extends AbstractVerticle {
     public static AtomicLong totalPingCount = new AtomicLong(0);
     public static AtomicLong totalSyncCount = new AtomicLong(0);
     public static AtomicLong totalItemOperationsCount = new AtomicLong(0);
-    public static AtomicLong activePingCount = new AtomicLong(0);
-    public static AtomicLong activeSyncCount = new AtomicLong(0);
-    public static AtomicLong activeItemOperationsCount = new AtomicLong(0);
+    public static AtomicLong openPingCount = new AtomicLong(0);
+    public static AtomicLong openSyncCount = new AtomicLong(0);
+    public static AtomicLong openItemOperationsCount = new AtomicLong(0);
 
     @Override
     public void start() {
@@ -54,9 +54,9 @@ public class HttpServer extends AbstractVerticle {
         vertx.setPeriodic(5000, doNothing -> {
             System.out.println("Open connections to remote server = " + openConnections
                     + ". Total requests = " + totalRequests + ". Success = " + successCount
-                    + ". Error = " + errorCount + ". Ping {" + totalPingCount + ", " + activePingCount + "}"
-                    + ". Sync {" + totalSyncCount + ", " + activeSyncCount + "}"
-                    + ". ItemOperations {" + totalItemOperationsCount + ", " + activeItemOperationsCount + "}");
+                    + ". Error = " + errorCount + ". Ping {" + totalPingCount + ", " + openPingCount + "}"
+                    + ". Sync {" + totalSyncCount + ", " + openSyncCount + "}"
+                    + ". ItemOperations {" + totalItemOperationsCount + ", " + openItemOperationsCount + "}");
         });
     }
 
@@ -106,9 +106,9 @@ public class HttpServer extends AbstractVerticle {
         totalSyncCount.set(0);
         totalItemOperationsCount.set(0);
 
-        activePingCount.set(0);
-        activeSyncCount.set(0);
-        activeItemOperationsCount.set(0);
+        openPingCount.set(0);
+        openSyncCount.set(0);
+        openItemOperationsCount.set(0);
 
         openConnections.set(0);
         totalRequests.set(0);
