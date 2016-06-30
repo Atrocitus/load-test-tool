@@ -1,0 +1,46 @@
+<!--
+  ~ /*
+  ~  * Copyright © 2014 AirWatch, LLC. All rights reserved.
+  ~  * This product is protected by copyright and intellectual property laws
+  ~  * in the United States and other countries as well as by international treaties.
+  ~  * AirWatch products may be covered by one or more patents listed at
+  ~  * http://www.vmware.com/go/patents.
+  ~  */
+  -->
+
+<configuration>
+
+    <appender name="stdout" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d %p \(%t\) [%c] - %m%n</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="APP_LOG" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <append>true</append>
+        <File>../../app.log</File>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %p \(%t\) [%c] - %m%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
+            <maxIndex>40</maxIndex>
+            <FileNamePattern>../../app.log.%i</FileNamePattern>
+        </rollingPolicy>
+        <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
+            <MaxFileSize>25MB</MaxFileSize>
+        </triggeringPolicy>
+    </appender>
+
+    <appender name="APP_LOG_ASYNC" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="APP_LOG"/>
+    </appender>
+
+    <!-- TODO - What are the different available logging levels in logback/slf4j, let this know to TE team. -->
+    <logger name="com" level="info"/>
+
+    <root level="info">
+        <appender-ref ref="APP_LOG_ASYNC"/>
+    </root>
+
+</configuration>
+
