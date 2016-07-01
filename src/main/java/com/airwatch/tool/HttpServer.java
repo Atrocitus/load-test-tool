@@ -1,7 +1,6 @@
 package com.airwatch.tool;
 
 import io.vertx.core.http.HttpServerOptions;
-import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.rxjava.core.AbstractVerticle;
 import io.vertx.rxjava.core.MultiMap;
@@ -23,7 +22,7 @@ import static io.vertx.core.impl.Arguments.require;
 public class HttpServer extends AbstractVerticle {
 
     public static final ConcurrentHashMap<String, AtomicLong> errorsType = new ConcurrentHashMap();
-    public static final ConcurrentHashMap<String, AtomicLong> non200Response = new ConcurrentHashMap();
+    public static final ConcurrentHashMap<String, AtomicLong> non200Responses = new ConcurrentHashMap();
     private static final Logger LOGGER = LoggerFactory.getLogger(HttpServer.class);
     public static AtomicLong openConnections = new AtomicLong(0);
     public static AtomicLong errorCount = new AtomicLong(0);
@@ -31,9 +30,17 @@ public class HttpServer extends AbstractVerticle {
     public static AtomicLong totalRequests = new AtomicLong(0);
     public static AtomicBoolean testInProgress = new AtomicBoolean(false);
     public static AtomicBoolean testStarted = new AtomicBoolean(false);
+    public static AtomicBoolean startSinglePolicyUpdateSubmit = new AtomicBoolean(false);
+    public static AtomicBoolean startSinglePolicyUpdateStarted = new AtomicBoolean(false);
     public static AtomicLong maxOpenConnections = new AtomicLong(0);
-    public static JsonArray remotePaths;
+
+    public static AtomicLong singlePolicyUpdateMaxConnections = new AtomicLong(0);
+
     public static String remoteMethod;
+    public static String remoteHost;
+    public static String pingURL = "";
+    public static String syncURL = "";
+    public static String itemOPerationsURL = "";
     public static Long durationInSeconds;
     public static AtomicLong totalPingCount = new AtomicLong(0);
     public static AtomicLong totalSyncCount = new AtomicLong(0);
@@ -72,7 +79,7 @@ public class HttpServer extends AbstractVerticle {
                     + ". Error = " + errorCount + ". Error types with count = " + errorsType + ". Ping {" + totalPingCount + ", " + openPingCount + "}"
                     + ". Sync {" + totalSyncCount + ", " + openSyncCount + "}"
                     + ". ItemOperations {" + totalItemOperationsCount + ", " + openItemOperationsCount + "}"
-                    + ". Non 200 response " + non200Response);
+                    + ". Non 200 response " + non200Responses);
         });
     }
 
@@ -83,11 +90,10 @@ public class HttpServer extends AbstractVerticle {
             LOGGER.error("Unable to handle request {}", context.getBodyAsString(), exception);
             context.response().setChunked(true).write("Error : " + exception.getMessage()).end();
         });
-        router.get("/load/hello").handler(context -> sayHello(context));
-        router.post("/load/hello").handler(context -> sayHello(context));
         router.post("/load/start").handler(context -> startLoadTest(context));
         router.post("/load/stop").handler(context -> stopLoadTest(context));
         router.get("/load/stop").handler(context -> stopLoadTest(context));
+        router.post("/load/startsinglepolicyload").handler(context -> startSinglePolicyUpdate(context));
         return router;
     }
 
@@ -101,8 +107,13 @@ public class HttpServer extends AbstractVerticle {
             require(durationInSeconds != null && durationInSeconds > 0, "Duration to run the tests should be defined in minutes using variable 'durationInSeconds'");
             require(concurrentRequests != null && concurrentRequests > 0, "Concurrent requests size should be defined as number using variable 'concurrentRequests'");
             maxOpenConnections.set(concurrentRequests);
-            remotePaths = json.getJsonArray("remotePaths");
+            remoteHost = json.getString("remoteHost");
             remoteMethod = json.getString("remoteMethod");
+
+            pingURL = remoteHost + "/Microsoft-Server-ActiveSync?Cmd=Ping&User=KenyaUser118729&DeviceId=ABC&DeviceType=2";
+            syncURL = remoteHost + "/Microsoft-Server-ActiveSync?Cmd=Sync&User=KenyaUser118729&DeviceId=ABC&DeviceType=2";
+            itemOPerationsURL = remoteHost + "/Microsoft-Server-ActiveSync?Cmd=ItemOperations&User=KenyaUser118729&DeviceId=ABC&DeviceType=2";
+
             testStarted.set(true);
             vertx.setTimer(durationInSeconds * 1000, doNothing -> {
                 System.out.println("*************************************************************************************");
@@ -130,8 +141,22 @@ public class HttpServer extends AbstractVerticle {
         totalRequests.set(0);
         errorCount.set(0);
         successCount.set(0);
+
         errorsType.clear();
-        non200Response.clear();
+        non200Responses.clear();
+    }
+
+    private void startSinglePolicyUpdate(final RoutingContext context) {
+        if (!testStarted.get()) {
+            context.response().setChunked(true).write("First start the load test.").end();
+        } else if (startSinglePolicyUpdateSubmit.compareAndSet(false, true)) {
+            context.response().setChunked(true).write("Single Policy Payload submit started successfully!!!").end();
+            JsonObject json = context.getBodyAsJson();
+            singlePolicyUpdateMaxConnections.set(json.getInteger("singlePolicyUpdateMaxConnections"));
+            startSinglePolicyUpdateStarted.set(true);
+        } else {
+            context.response().setChunked(true).write("Single Policy Payload submit is already running!!!").end();
+        }
     }
 
     private void stopLoadTest(final RoutingContext context) {
@@ -142,9 +167,7 @@ public class HttpServer extends AbstractVerticle {
     private void shutdownTheTest() {
         testInProgress.set(false);
         testStarted.set(false);
-    }
-
-    private void sayHello(final RoutingContext context) {
-        context.response().setChunked(true).write("hello").end();
+        startSinglePolicyUpdateSubmit.set(false);
+        startSinglePolicyUpdateStarted.set(false);
     }
 }

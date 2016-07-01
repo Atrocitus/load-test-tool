@@ -2,6 +2,7 @@ package com.airwatch.tool;
 
 import io.vertx.core.http.HttpClientOptions;
 import io.vertx.rxjava.core.AbstractVerticle;
+import io.vertx.rxjava.core.Vertx;
 import io.vertx.rxjava.core.http.HttpClient;
 import io.vertx.rxjava.core.http.HttpClientRequest;
 import io.vertx.rxjava.core.http.HttpClientResponse;
@@ -15,25 +16,25 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static com.airwatch.tool.HttpServer.*;
+
 /**
  * Created by manishk on 6/27/16.
  */
 public class LoadWorker extends AbstractVerticle {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LoadWorker.class);
-    private static final Map<String, HttpClient> clients = new HashMap<>();
-
     @Override
     public void start() {
         vertx.setPeriodic(100, doNothing -> {
-            if (HttpServer.testStarted.get() && HttpServer.openConnections.get() < HttpServer.maxOpenConnections.get()) {
+            if (testStarted.get() && openConnections.get() < maxOpenConnections.get()) {
                 for (int index = 0; index < 70; index++) {
                     sendRequestToRemote();
                 }
             }
         });
         vertx.setPeriodic(200, doNothing -> {
-            if (HttpServer.testStarted.get() && HttpServer.openConnections.get() < HttpServer.maxOpenConnections.get()) {
+            if (testStarted.get() && openConnections.get() < maxOpenConnections.get()) {
                 for (int index = 0; index < 120; index++) {
                     sendRequestToRemote();
                 }
@@ -41,7 +42,7 @@ public class LoadWorker extends AbstractVerticle {
         });
 
         vertx.setPeriodic(300, doNothing -> {
-            if (HttpServer.testStarted.get() && HttpServer.openConnections.get() < HttpServer.maxOpenConnections.get()) {
+            if (testStarted.get() && openConnections.get() < maxOpenConnections.get()) {
                 for (int index = 0; index < 180; index++) {
                     sendRequestToRemote();
                 }
@@ -50,57 +51,63 @@ public class LoadWorker extends AbstractVerticle {
     }
 
     private void sendRequestToRemote() {
-        HttpServer.openConnections.incrementAndGet();
-        HttpServer.totalRequests.incrementAndGet();
-        int random = 1 + (int) (Math.random() * ((HttpServer.remotePaths.size() - 1) + 1));
-        String uriPath = HttpServer.remotePaths.getString(random - 1);
+        openConnections.incrementAndGet();
+        totalRequests.incrementAndGet();
+
+        // We don't want to rely on random selector as it won't guarantee the equal number of requests for each command type.
+        String uriPath = pingURL;
+        if (totalPingCount.get() > totalSyncCount.get()) {
+            uriPath = syncURL;
+        } else if (totalPingCount.get() > totalItemOperationsCount.get()) {
+            uriPath = itemOPerationsURL;
+        }
         String uriPathLowercase = uriPath.toLowerCase(Locale.ENGLISH);
         final boolean ping = uriPathLowercase.contains("cmd=ping");
         final boolean sync = uriPathLowercase.contains("cmd=sync");
         if (ping) {
-            HttpServer.totalPingCount.incrementAndGet();
-            HttpServer.openPingCount.incrementAndGet();
+            totalPingCount.incrementAndGet();
+            openPingCount.incrementAndGet();
         } else if (sync) {
-            HttpServer.totalSyncCount.incrementAndGet();
-            HttpServer.openSyncCount.incrementAndGet();
+            totalSyncCount.incrementAndGet();
+            openSyncCount.incrementAndGet();
         } else {
-            HttpServer.totalItemOperationsCount.incrementAndGet();
-            HttpServer.openItemOperationsCount.incrementAndGet();
+            totalItemOperationsCount.incrementAndGet();
+            openItemOperationsCount.incrementAndGet();
         }
         URI uri = URI.create(uriPath);
 
         HttpClientRequest clientRequest;
         String path = uri.getPath() + "?" + uri.getQuery();
-        if ("OPTIONS".equalsIgnoreCase(HttpServer.remoteMethod)) {
-            clientRequest = createClient(uri).options(path);
+        if ("OPTIONS".equalsIgnoreCase(remoteMethod)) {
+            clientRequest = ClientUtil.createClient(uri, vertx).options(path);
         } else {
-            clientRequest = createClient(uri).post(path);
+            clientRequest = ClientUtil.createClient(uri, vertx).post(path);
         }
         clientRequest.toObservable().subscribe(httpClientResponse -> {
             checkResponse(httpClientResponse);
             // Got response from email server.
-            HttpServer.openConnections.decrementAndGet();
+            openConnections.decrementAndGet();
             decrementCommandCount(ping, sync);
         }, ex -> {
             decrementCommandCount(ping, sync);
             countError(ex);
             LOGGER.error("Error while connecting to remote host", ex);
         });
-        clientRequest.headers().addAll(HttpServer.headers);
+        clientRequest.headers().addAll(headers);
         clientRequest.end();
     }
 
     private void checkResponse(HttpClientResponse httpClientResponse) {
         if (httpClientResponse.statusCode() != 200) {
             String statusCode = httpClientResponse.statusCode() + "";
-            AtomicLong non200Response = HttpServer.non200Response.get(statusCode);
+            AtomicLong non200Response = non200Responses.get(statusCode);
             if (non200Response == null) {
                 non200Response = new AtomicLong(0);
             }
             non200Response.incrementAndGet();
-            HttpServer.non200Response.put(statusCode, non200Response);
+            non200Responses.put(statusCode, non200Response);
         } else {
-            HttpServer.successCount.incrementAndGet();
+            successCount.incrementAndGet();
         }
     }
 
@@ -109,49 +116,24 @@ public class LoadWorker extends AbstractVerticle {
         if (errorMessage == null) {
             errorMessage = ex.getLocalizedMessage();
         }
-        AtomicLong errorTypeCount = HttpServer.errorsType.get(errorMessage);
+        AtomicLong errorTypeCount = errorsType.get(errorMessage);
         if (errorTypeCount == null) {
             errorTypeCount = new AtomicLong(0);
         }
         errorTypeCount.incrementAndGet();
-        HttpServer.errorsType.put(errorMessage, errorTypeCount);
+        errorsType.put(errorMessage, errorTypeCount);
 
-        HttpServer.errorCount.incrementAndGet();
-        HttpServer.openConnections.decrementAndGet();
-    }
-
-    private HttpClient createClient(final URI uri) {
-        String hostKey = uri.getHost() + uri.getPort();
-        HttpClient httpClient = clients.get(hostKey);
-        if (httpClient == null) {
-            boolean secure = StringUtils.equalsIgnoreCase(uri.getScheme(), "https");
-            HttpClientOptions options = new HttpClientOptions()
-                    .setDefaultHost(uri.getHost())
-                    .setSsl(secure)
-                    .setConnectTimeout(900000)
-                    .setMaxPoolSize(50000)
-                    .setTryUseCompression(true);
-            // If port isn't set then Vertx uses default port as 80 - which will cause issues.
-            if (uri.getPort() == -1) {
-                options.setDefaultPort(secure ? 443 : 80);
-            } else {
-                options.setDefaultPort(uri.getPort());
-            }
-            options.setTrustAll(true);
-            options.setVerifyHost(false);
-            httpClient = vertx.createHttpClient(options);
-            clients.put(hostKey, httpClient);
-        }
-        return httpClient;
+        errorCount.incrementAndGet();
+        openConnections.decrementAndGet();
     }
 
     private void decrementCommandCount(final boolean ping, final boolean sync) {
         if (ping) {
-            HttpServer.openPingCount.decrementAndGet();
+            openPingCount.decrementAndGet();
         } else if (sync) {
-            HttpServer.openSyncCount.decrementAndGet();
+            openSyncCount.decrementAndGet();
         } else {
-            HttpServer.openItemOperationsCount.decrementAndGet();
+            openItemOperationsCount.decrementAndGet();
         }
     }
 }
