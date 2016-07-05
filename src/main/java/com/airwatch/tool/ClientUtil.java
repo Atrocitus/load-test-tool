@@ -16,15 +16,15 @@ public class ClientUtil {
 
     private static final Map<String, HttpClient> clients = new HashMap<>();
 
-    public static HttpClient createClient(final URI uri, final Vertx vertx) {
-        String hostKey = uri.getHost() + uri.getPort();
-        HttpClient httpClient = clients.get(hostKey);
+    public static HttpClient createClient(final String remoteHost, final Vertx vertx) {
+        HttpClient httpClient = clients.get(remoteHost);
         if (httpClient == null) {
+            URI uri = URI.create(remoteHost);
             boolean secure = StringUtils.equalsIgnoreCase(uri.getScheme(), "https");
             HttpClientOptions options = new HttpClientOptions()
                     .setDefaultHost(uri.getHost())
                     .setSsl(secure)
-                    .setConnectTimeout(900000)
+                    .setConnectTimeout(990000)
                     .setMaxPoolSize(50000)
                     .setTryUseCompression(true);
             // If port isn't set then Vertx uses default port as 80 - which will cause issues.
@@ -33,10 +33,10 @@ public class ClientUtil {
             } else {
                 options.setDefaultPort(uri.getPort());
             }
-            options.setTrustAll(true).setKeepAlive(true);
+            options.setTrustAll(true).setIdleTimeout(990000);
             options.setVerifyHost(false);
             httpClient = vertx.createHttpClient(options);
-            clients.put(hostKey, httpClient);
+            clients.put(remoteHost, httpClient);
         }
         return httpClient;
     }

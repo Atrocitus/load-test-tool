@@ -1,6 +1,7 @@
 package com.airwatch.tool;
 
 import io.vertx.core.http.HttpServerOptions;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.rxjava.core.AbstractVerticle;
 import io.vertx.rxjava.core.MultiMap;
@@ -10,6 +11,7 @@ import io.vertx.rxjava.ext.web.handler.BodyHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -34,14 +36,14 @@ public class HttpServer extends AbstractVerticle {
     public static AtomicBoolean startSinglePolicyUpdateStarted = new AtomicBoolean(false);
     public static AtomicLong maxOpenConnections = new AtomicLong(0);
 
-    public static AtomicLong singlePolicyUpdateMaxConnections = new AtomicLong(0);
+    public static AtomicLong singlePolicyUpdateOpenConnections = new AtomicLong(0);
 
     public static String remoteMethod;
-    public static String remoteHost;
-    public static String pingURL = "";
-    public static String syncURL = "";
-    public static String itemOPerationsURL = "";
+    public static JsonArray remoteHostsWithPortAndProtocol = new JsonArray();
+    public static JsonArray singlePolicyUpdateHostsWithPortAndProtocol = new JsonArray();
+
     public static Long durationInSeconds;
+    public static Long singlePolicyUpdateDurationInSeconds;
     public static AtomicLong totalPingCount = new AtomicLong(0);
     public static AtomicLong totalSyncCount = new AtomicLong(0);
     public static AtomicLong totalItemOperationsCount = new AtomicLong(0);
@@ -49,6 +51,7 @@ public class HttpServer extends AbstractVerticle {
     public static AtomicLong openSyncCount = new AtomicLong(0);
     public static AtomicLong openItemOperationsCount = new AtomicLong(0);
     public static MultiMap headers = null;
+    public static List<Device> devices = CsvReader.createDevices();
 
     @Override
     public void start() {
@@ -74,7 +77,7 @@ public class HttpServer extends AbstractVerticle {
         server.requestHandler(router::accept).listen(port);
 
         vertx.setPeriodic(5000, doNothing -> {
-            System.out.println("Open connections to remote server = " + openConnections
+            System.out.println("\nOpen connections to remote server = " + openConnections
                     + ". Total requests = " + totalRequests + ". Success = " + successCount
                     + ". Error = " + errorCount + ". Error types with count = " + errorsType + ". Ping {" + totalPingCount + ", " + openPingCount + "}"
                     + ". Sync {" + totalSyncCount + ", " + openSyncCount + "}"
@@ -106,14 +109,10 @@ public class HttpServer extends AbstractVerticle {
             Integer concurrentRequests = json.getInteger("concurrentRequests");
             require(durationInSeconds != null && durationInSeconds > 0, "Duration to run the tests should be defined in minutes using variable 'durationInSeconds'");
             require(concurrentRequests != null && concurrentRequests > 0, "Concurrent requests size should be defined as number using variable 'concurrentRequests'");
+            remoteHostsWithPortAndProtocol = json.getJsonArray("remoteHostsWithPortAndProtocol");
+            require(remoteHostsWithPortAndProtocol != null && remoteHostsWithPortAndProtocol.size() > 0, "Define the remote hosts as array with name 'remoteHostsWithPortAndProtocol'");
             maxOpenConnections.set(concurrentRequests);
-            remoteHost = json.getString("remoteHost");
             remoteMethod = json.getString("remoteMethod");
-
-            pingURL = remoteHost + "/Microsoft-Server-ActiveSync?Cmd=Ping&User=KenyaUser118729&DeviceId=ABC&DeviceType=2";
-            syncURL = remoteHost + "/Microsoft-Server-ActiveSync?Cmd=Sync&User=KenyaUser118729&DeviceId=ABC&DeviceType=2";
-            itemOPerationsURL = remoteHost + "/Microsoft-Server-ActiveSync?Cmd=ItemOperations&User=KenyaUser118729&DeviceId=ABC&DeviceType=2";
-
             testStarted.set(true);
             vertx.setTimer(durationInSeconds * 1000, doNothing -> {
                 System.out.println("*************************************************************************************");
@@ -147,13 +146,22 @@ public class HttpServer extends AbstractVerticle {
     }
 
     private void startSinglePolicyUpdate(final RoutingContext context) {
-        if (!testStarted.get()) {
-            context.response().setChunked(true).write("First start the load test.").end();
-        } else if (startSinglePolicyUpdateSubmit.compareAndSet(false, true)) {
-            context.response().setChunked(true).write("Single Policy Payload submit started successfully!!!").end();
+        if (startSinglePolicyUpdateSubmit.compareAndSet(false, true)) {
             JsonObject json = context.getBodyAsJson();
-            singlePolicyUpdateMaxConnections.set(json.getInteger("singlePolicyUpdateMaxConnections"));
+            singlePolicyUpdateHostsWithPortAndProtocol = json.getJsonArray("singlePolicyUpdateHostsWithPortAndProtocol");
+            singlePolicyUpdateDurationInSeconds = json.getLong("singlePolicyUpdateDurationInSeconds");
+            singlePolicyUpdateOpenConnections.set(json.getInteger("singlePolicyUpdateOpenConnections"));
+
+            vertx.setTimer(singlePolicyUpdateDurationInSeconds * 1000, doNothing -> {
+                System.out.println("*************************************************************************************");
+                System.out.println("Stopping Single Policy Update test to make any further request!!!");
+                System.out.println("*************************************************************************************");
+                startSinglePolicyUpdateSubmit.set(false);
+                startSinglePolicyUpdateStarted.set(false);
+            });
+
             startSinglePolicyUpdateStarted.set(true);
+            context.response().setChunked(true).write("Single Policy Payload submit started successfully!!!").end();
         } else {
             context.response().setChunked(true).write("Single Policy Payload submit is already running!!!").end();
         }

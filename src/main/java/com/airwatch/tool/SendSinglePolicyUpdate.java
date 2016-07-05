@@ -4,9 +4,10 @@ import io.vertx.rxjava.core.AbstractVerticle;
 import io.vertx.rxjava.core.http.HttpClientRequest;
 import io.vertx.rxjava.core.http.HttpClientResponse;
 
-import java.net.URI;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+
+import static com.airwatch.tool.HttpServer.*;
 
 /**
  * Created by manishk on 7/1/16.
@@ -24,14 +25,14 @@ public class SendSinglePolicyUpdate extends AbstractVerticle {
     public void start() {
 
         vertx.setPeriodic(500, doNothing -> {
-            if (HttpServer.startSinglePolicyUpdateStarted.get() && singlePolicyUpdateOpenConnections.get() < HttpServer.singlePolicyUpdateMaxConnections.get()) {
+            if (HttpServer.startSinglePolicyUpdateStarted.get() && singlePolicyUpdateOpenConnections.get() < HttpServer.singlePolicyUpdateOpenConnections.get()) {
                 for (int index = 0; index < 30; index++) {
                     sendRequestToRemote();
                 }
             }
         });
         vertx.setPeriodic(800, doNothing -> {
-            if (HttpServer.startSinglePolicyUpdateStarted.get() && singlePolicyUpdateOpenConnections.get() < HttpServer.singlePolicyUpdateMaxConnections.get()) {
+            if (HttpServer.startSinglePolicyUpdateStarted.get() && singlePolicyUpdateOpenConnections.get() < HttpServer.singlePolicyUpdateOpenConnections.get()) {
                 for (int index = 0; index < 50; index++) {
                     sendRequestToRemote();
                 }
@@ -39,26 +40,30 @@ public class SendSinglePolicyUpdate extends AbstractVerticle {
         });
 
         vertx.setPeriodic(5000, doNothing -> {
-            System.out.println("Open connections to remote server = " + singlePolicyUpdateOpenConnections
-                    + ". Total requests = " + totalSinglePolicyRequests + ". Success = " + successCount
-                    + ". Error = " + errorCount + ". Non 200 response " + non200Responses);
+            if (HttpServer.startSinglePolicyUpdateStarted.get()) {
+                System.out.println("\nSingle Policy Update to remote server = " + singlePolicyUpdateOpenConnections
+                        + ". Total requests = " + totalSinglePolicyRequests + ". Success = " + successCount
+                        + ". Error = " + errorCount + ". Non 200 response " + non200Responses);
+            }
         });
-
     }
 
     private void sendRequestToRemote() {
         singlePolicyUpdateOpenConnections.incrementAndGet();
         totalSinglePolicyRequests.incrementAndGet();
         String path = "/segconsole/management.ashx?updatedevicepolicy";
-        URI uri = URI.create(HttpServer.remoteHost + path);
-        HttpClientRequest clientRequest = ClientUtil.createClient(uri, vertx).post(path);
+
+        String remoteHost = singlePolicyUpdateHostsWithPortAndProtocol.getString((int) (Math.random() * ((singlePolicyUpdateHostsWithPortAndProtocol.size() - 1) + 1)));
+
+        HttpClientRequest clientRequest = ClientUtil.createClient(remoteHost, vertx).post(path);
         clientRequest.toObservable().subscribe(httpClientResponse -> {
-            checkResponse(httpClientResponse);
+            checkResponse(httpClientResponse, remoteHost);
             singlePolicyUpdateOpenConnections.decrementAndGet();
         }, ex -> {
             countError(ex);
         });
-        clientRequest.setChunked(true).write("{\"AllowSync\":null,\"AwDeviceId\":552,\"BrowserUriScheme\":\"awb:\\/\\/\",\"BrowserUriSecureScheme\":\"awbs:\\/\\/\",\"CreatedDateTime\":\"\\/Date(-62135578800000)\\/\",\"DaysSinceLastActivity\":0,\"DeviceIdentifier\":\"BE6330CAE8BC441EBCF65555B9E31114\",\"DevicePolicyLoadEndTime\":\"\\/Date(-62135578800000)\\/\",\"DevicePolicyLoadStartTime\":\"\\/Date(-62135578800000)\\/\",\"DeviceType\":2,\"EasDeviceIdentifier\":\"BE6330CAE8BC441EBCF65555B9E31114\",\"EasProfileInstall\":false,\"FullDeviceIdentifier\":\"BE6330CAE8BC441EBCF65555B9E31114\",\"IsCompromised\":false,\"IsDataProtected\":true,\"IsEnrolled\":true,\"IsManaged\":true,\"IsModelCompliant\":true,\"IsNotMDMCompliant\":false,\"IsOsCompliant\":true,\"MemConfigId\":27,\"MemDeviceId\":7653,\"MobileEmailDiagnosticsEnabled\":false,\"RemoveDevice\":false}").end();
+        String payload = "{\"AllowSync\":null,\"AwDeviceId\":552,\"BrowserUriScheme\":\"awb:\\/\\/\",\"BrowserUriSecureScheme\":\"awbs:\\/\\/\",\"CreatedDateTime\":\"\\/Date(-62135578800000)\\/\",\"DaysSinceLastActivity\":0,\"DeviceIdentifier\":\"BE6330CAE8BC441EBCF65555B9E31114\",\"DevicePolicyLoadEndTime\":\"\\/Date(-62135578800000)\\/\",\"DevicePolicyLoadStartTime\":\"\\/Date(-62135578800000)\\/\",\"DeviceType\":2,\"EasDeviceIdentifier\":\"BE6330CAE8BC441EBCF65555B9E31114\",\"EasProfileInstall\":false,\"FullDeviceIdentifier\":\"BE6330CAE8BC441EBCF65555B9E31114\",\"IsCompromised\":false,\"IsDataProtected\":true,\"IsEnrolled\":true,\"IsManaged\":true,\"IsModelCompliant\":true,\"IsNotMDMCompliant\":false,\"IsOsCompliant\":true,\"MemConfigId\":27,\"MemDeviceId\":7653,\"MobileEmailDiagnosticsEnabled\":false,\"RemoveDevice\":false}";
+        clientRequest.setChunked(true).write(payload).end();
     }
 
     private void countError(Throwable ex) {
@@ -77,15 +82,15 @@ public class SendSinglePolicyUpdate extends AbstractVerticle {
         errorsMessages.put(errorMessage, errorTypeCount);
     }
 
-    private void checkResponse(HttpClientResponse httpClientResponse) {
+    private void checkResponse(HttpClientResponse httpClientResponse, String remoteHost) {
         if (httpClientResponse.statusCode() != 200) {
-            String statusCode = httpClientResponse.statusCode() + "";
-            AtomicLong non200Response = non200Responses.get(statusCode);
+            String statusCodeKey = httpClientResponse.statusCode() + " :: " + remoteHost;
+            AtomicLong non200Response = non200Responses.get(statusCodeKey);
             if (non200Response == null) {
                 non200Response = new AtomicLong(0);
             }
             non200Response.incrementAndGet();
-            non200Responses.put(statusCode, non200Response);
+            non200Responses.put(statusCodeKey, non200Response);
         } else {
             successCount.incrementAndGet();
         }

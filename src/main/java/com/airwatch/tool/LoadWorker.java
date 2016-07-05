@@ -1,19 +1,12 @@
 package com.airwatch.tool;
 
-import io.vertx.core.http.HttpClientOptions;
 import io.vertx.rxjava.core.AbstractVerticle;
-import io.vertx.rxjava.core.Vertx;
-import io.vertx.rxjava.core.http.HttpClient;
 import io.vertx.rxjava.core.http.HttpClientRequest;
 import io.vertx.rxjava.core.http.HttpClientResponse;
-import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.net.URI;
-import java.util.HashMap;
 import java.util.Locale;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.airwatch.tool.HttpServer.*;
@@ -24,6 +17,10 @@ import static com.airwatch.tool.HttpServer.*;
 public class LoadWorker extends AbstractVerticle {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LoadWorker.class);
+    private static String pingURL = "/Microsoft-Server-ActiveSync?Cmd=Ping&";
+    private static String syncURL = "/Microsoft-Server-ActiveSync?Cmd=Sync&";
+    private static String itemOPerationsURL = "/Microsoft-Server-ActiveSync?Cmd=ItemOperations&";
+
     @Override
     public void start() {
         vertx.setPeriodic(100, doNothing -> {
@@ -61,6 +58,11 @@ public class LoadWorker extends AbstractVerticle {
         } else if (totalPingCount.get() > totalItemOperationsCount.get()) {
             uriPath = itemOPerationsURL;
         }
+        int random = (int) (Math.random() * ((1000 - 1) + 1));
+        Device device = devices.get(random);
+        StringBuilder builder = new StringBuilder(uriPath).append("DeviceId=").append(device.getEasDeviceId())
+                .append("&User=").append(device.getUserId()).append("&DeviceType=").append(device.getEasDeviceType());
+        uriPath = builder.toString();
         String uriPathLowercase = uriPath.toLowerCase(Locale.ENGLISH);
         final boolean ping = uriPathLowercase.contains("cmd=ping");
         final boolean sync = uriPathLowercase.contains("cmd=sync");
@@ -74,20 +76,25 @@ public class LoadWorker extends AbstractVerticle {
             totalItemOperationsCount.incrementAndGet();
             openItemOperationsCount.incrementAndGet();
         }
-        URI uri = URI.create(uriPath);
+        String remoteHost = remoteHostsWithPortAndProtocol.getString((int) (Math.random() * ((remoteHostsWithPortAndProtocol.size() - 1) + 1)));
 
         HttpClientRequest clientRequest;
-        String path = uri.getPath() + "?" + uri.getQuery();
         if ("OPTIONS".equalsIgnoreCase(remoteMethod)) {
-            clientRequest = ClientUtil.createClient(uri, vertx).options(path);
+            clientRequest = ClientUtil.createClient(remoteHost, vertx).options(uriPath);
         } else {
-            clientRequest = ClientUtil.createClient(uri, vertx).post(path);
+            clientRequest = ClientUtil.createClient(remoteHost, vertx).post(uriPath);
         }
         clientRequest.toObservable().subscribe(httpClientResponse -> {
-            checkResponse(httpClientResponse);
-            // Got response from email server.
-            openConnections.decrementAndGet();
-            decrementCommandCount(ping, sync);
+            RxSupport.observeBody(httpClientResponse).subscribe(buffer -> {
+                // Read the full response otherwise it will cause "Cannot assign requested address" error.
+            }, ex -> {
+
+            }, () -> {
+                checkResponse(httpClientResponse, remoteHost, ping, sync);
+                // Got response from email server.
+                openConnections.decrementAndGet();
+                decrementCommandCount(ping, sync);
+            });
         }, ex -> {
             decrementCommandCount(ping, sync);
             countError(ex);
@@ -97,15 +104,16 @@ public class LoadWorker extends AbstractVerticle {
         clientRequest.end();
     }
 
-    private void checkResponse(HttpClientResponse httpClientResponse) {
+    private void checkResponse(HttpClientResponse httpClientResponse, String remoteHost, boolean ping, boolean sync) {
+        String requestType = ping ? "PING" : sync ? "SYNC" : "ItemOperation";
         if (httpClientResponse.statusCode() != 200) {
-            String statusCode = httpClientResponse.statusCode() + "";
-            AtomicLong non200Response = non200Responses.get(statusCode);
+            String statusCodeKey = httpClientResponse.statusCode() + " :: " + remoteHost + " :: " + requestType;
+            AtomicLong non200Response = non200Responses.get(statusCodeKey);
             if (non200Response == null) {
                 non200Response = new AtomicLong(0);
             }
             non200Response.incrementAndGet();
-            non200Responses.put(statusCode, non200Response);
+            non200Responses.put(statusCodeKey, non200Response);
         } else {
             successCount.incrementAndGet();
         }
