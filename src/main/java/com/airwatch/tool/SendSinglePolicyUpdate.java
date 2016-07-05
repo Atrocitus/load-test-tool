@@ -7,7 +7,7 @@ import io.vertx.rxjava.core.http.HttpClientResponse;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static com.airwatch.tool.HttpServer.*;
+import static com.airwatch.tool.HttpServer.singlePolicyUpdateHostsWithPortAndProtocol;
 
 /**
  * Created by manishk on 7/1/16.
@@ -38,6 +38,42 @@ public class SendSinglePolicyUpdate extends AbstractVerticle {
                 }
             }
         });
+        vertx.setPeriodic(800, doNothing -> {
+            if (HttpServer.startSinglePolicyUpdateStarted.get() && singlePolicyUpdateOpenConnections.get() < HttpServer.singlePolicyUpdateOpenConnections.get()) {
+                for (int index = 0; index < 50; index++) {
+                    sendRequestToRemote();
+                }
+            }
+        });
+
+//        vertx.setPeriodic(200, doNothing -> {
+//            if (HttpServer.startSinglePolicyUpdateStarted.get() && singlePolicyUpdateOpenConnections.get() < HttpServer.singlePolicyUpdateOpenConnections.get()) {
+//                for (int index = 0; index < 30; index++) {
+//                    sendRequestToRemote();
+//                }
+//            }
+//        });
+//        vertx.setPeriodic(200, doNothing -> {
+//            if (HttpServer.startSinglePolicyUpdateStarted.get() && singlePolicyUpdateOpenConnections.get() < HttpServer.singlePolicyUpdateOpenConnections.get()) {
+//                for (int index = 0; index < 50; index++) {
+//                    sendRequestToRemote();
+//                }
+//            }
+//        });
+//        vertx.setPeriodic(300, doNothing -> {
+//            if (HttpServer.startSinglePolicyUpdateStarted.get() && singlePolicyUpdateOpenConnections.get() < HttpServer.singlePolicyUpdateOpenConnections.get()) {
+//                for (int index = 0; index < 70; index++) {
+//                    sendRequestToRemote();
+//                }
+//            }
+//        });
+//        vertx.setPeriodic(400, doNothing -> {
+//            if (HttpServer.startSinglePolicyUpdateStarted.get() && singlePolicyUpdateOpenConnections.get() < HttpServer.singlePolicyUpdateOpenConnections.get()) {
+//                for (int index = 0; index < 70; index++) {
+//                    sendRequestToRemote();
+//                }
+//            }
+//        });
 
         vertx.setPeriodic(5000, doNothing -> {
             if (HttpServer.startSinglePolicyUpdateStarted.get()) {
