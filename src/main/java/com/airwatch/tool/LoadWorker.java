@@ -19,29 +19,37 @@ public class LoadWorker extends AbstractVerticle {
     private static final Logger LOGGER = LoggerFactory.getLogger(LoadWorker.class);
     private static String pingURL = "/Microsoft-Server-ActiveSync?Cmd=Ping&";
     private static String syncURL = "/Microsoft-Server-ActiveSync?Cmd=Sync&";
-    private static String itemOPerationsURL = "/Microsoft-Server-ActiveSync?Cmd=ItemOperations&";
+    private static String itemOperationsURL = "/Microsoft-Server-ActiveSync?Cmd=ItemOperations&";
 
     @Override
     public void start() {
+
         vertx.setPeriodic(100, doNothing -> {
-            if (testStarted.get() && openConnections.get() < maxOpenConnections.get()) {
-                for (int index = 0; index < 70; index++) {
-                    sendRequestToRemote();
+            if (testStarted.get() && openConnections.get() < maxOpenConnections.get() * rampUpTimeMultiplier) {
+                for (int index = 0; index < 70 * rampUpTimeMultiplier; index++) {
+                    if (openConnections.get() < maxOpenConnections.get()) {
+                        sendRequestToRemote();
+                    }
                 }
             }
         });
+
         vertx.setPeriodic(200, doNothing -> {
-            if (testStarted.get() && openConnections.get() < maxOpenConnections.get()) {
-                for (int index = 0; index < 120; index++) {
-                    sendRequestToRemote();
+            if (testStarted.get() && openConnections.get() < maxOpenConnections.get() * rampUpTimeMultiplier) {
+                for (int index = 0; index < 120 * rampUpTimeMultiplier; index++) {
+                    if (openConnections.get() < maxOpenConnections.get()) {
+                        sendRequestToRemote();
+                    }
                 }
             }
         });
 
         vertx.setPeriodic(300, doNothing -> {
-            if (testStarted.get() && openConnections.get() < maxOpenConnections.get()) {
-                for (int index = 0; index < 180; index++) {
-                    sendRequestToRemote();
+            if (testStarted.get() && openConnections.get() < maxOpenConnections.get() * rampUpTimeMultiplier) {
+                for (int index = 0; index < 180 * rampUpTimeMultiplier; index++) {
+                    if (openConnections.get() < maxOpenConnections.get()) {
+                        sendRequestToRemote();
+                    }
                 }
             }
         });
@@ -56,7 +64,7 @@ public class LoadWorker extends AbstractVerticle {
         if (totalPingCount.get() > totalSyncCount.get()) {
             uriPath = syncURL;
         } else if (totalPingCount.get() > totalItemOperationsCount.get()) {
-            uriPath = itemOPerationsURL;
+            uriPath = itemOperationsURL;
         }
         int random = (int) (Math.random() * ((1000 - 1) + 1));
         Device device = devices.get(random);

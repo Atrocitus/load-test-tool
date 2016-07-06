@@ -42,7 +42,11 @@ public class HttpServer extends AbstractVerticle {
     public static JsonArray remoteHostsWithPortAndProtocol = new JsonArray();
     public static JsonArray singlePolicyUpdateHostsWithPortAndProtocol = new JsonArray();
 
+    public static int rampUpTimeCounter = 0;
+    public static Double rampUpTimeMultiplier = 0D;
+
     public static Long durationInSeconds;
+    public static Double rampUpTimeInSeconds;
     public static Long singlePolicyUpdateDurationInSeconds;
     public static AtomicLong totalPingCount = new AtomicLong(0);
     public static AtomicLong totalSyncCount = new AtomicLong(0);
@@ -84,6 +88,21 @@ public class HttpServer extends AbstractVerticle {
                     + ". ItemOperations {" + totalItemOperationsCount + ", " + openItemOperationsCount + "}"
                     + ". Non 200 response " + non200Responses);
         });
+
+        final long timerId = vertx.setPeriodic(1000, doNothing -> {
+            if (testStarted.get()) {
+                rampUpTimeCounter++;
+                rampUpTimeMultiplier = (rampUpTimeCounter / rampUpTimeInSeconds);
+            }
+        });
+
+        vertx.setPeriodic(1000, doNothing -> {
+            if (testStarted.get() && rampUpTimeCounter > rampUpTimeInSeconds) {
+                rampUpTimeMultiplier = 1D;
+                vertx.cancelTimer(timerId);
+                rampUpTimeCounter--;
+            }
+        });
     }
 
     private Router createRequestHandler() {
@@ -106,13 +125,14 @@ public class HttpServer extends AbstractVerticle {
             JsonObject json = context.getBodyAsJson();
             require(json != null, "No request body");
             durationInSeconds = json.getLong("durationInSeconds");
+            rampUpTimeInSeconds = json.getDouble("rampUpTimeInSeconds", 20D);
             Integer concurrentRequests = json.getInteger("concurrentRequests");
             require(durationInSeconds != null && durationInSeconds > 0, "Duration to run the tests should be defined in minutes using variable 'durationInSeconds'");
             require(concurrentRequests != null && concurrentRequests > 0, "Concurrent requests size should be defined as number using variable 'concurrentRequests'");
             remoteHostsWithPortAndProtocol = json.getJsonArray("remoteHostsWithPortAndProtocol");
             require(remoteHostsWithPortAndProtocol != null && remoteHostsWithPortAndProtocol.size() > 0, "Define the remote hosts as array with name 'remoteHostsWithPortAndProtocol'");
             maxOpenConnections.set(concurrentRequests);
-            remoteMethod = json.getString("remoteMethod");
+            remoteMethod = json.getString("remoteMethod", "POST");
             testStarted.set(true);
             vertx.setTimer(durationInSeconds * 1000, doNothing -> {
                 System.out.println("*************************************************************************************");
@@ -177,5 +197,7 @@ public class HttpServer extends AbstractVerticle {
         testStarted.set(false);
         startSinglePolicyUpdateSubmit.set(false);
         startSinglePolicyUpdateStarted.set(false);
+        rampUpTimeMultiplier = 0D;
+        rampUpTimeCounter = 0;
     }
 }
