@@ -66,7 +66,7 @@ public class LoadWorker extends AbstractVerticle {
         } else if (totalPingCount.get() > totalItemOperationsCount.get()) {
             uriPath = itemOperationsURL;
         }
-        int random = (int) (Math.random() * ((1000 - 1) + 1));
+        int random = (int) (Math.random() * ((devices.size() - 1) + 1));
         Device device = devices.get(random);
         StringBuilder builder = new StringBuilder(uriPath).append("DeviceId=").append(device.getEasDeviceId())
                 .append("&User=").append(device.getUserId()).append("&DeviceType=").append(device.getEasDeviceType());

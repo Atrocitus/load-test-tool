@@ -24,23 +24,23 @@ public class SendSinglePolicyUpdate extends AbstractVerticle {
     @Override
     public void start() {
 
-        vertx.setPeriodic(500, doNothing -> {
+        vertx.setPeriodic(200, doNothing -> {
             if (HttpServer.startSinglePolicyUpdateStarted.get() && singlePolicyUpdateOpenConnections.get() < HttpServer.singlePolicyUpdateOpenConnections.get()) {
                 for (int index = 0; index < 30; index++) {
                     sendRequestToRemote();
                 }
             }
         });
-        vertx.setPeriodic(800, doNothing -> {
+        vertx.setPeriodic(500, doNothing -> {
             if (HttpServer.startSinglePolicyUpdateStarted.get() && singlePolicyUpdateOpenConnections.get() < HttpServer.singlePolicyUpdateOpenConnections.get()) {
                 for (int index = 0; index < 50; index++) {
                     sendRequestToRemote();
                 }
             }
         });
-        vertx.setPeriodic(800, doNothing -> {
+        vertx.setPeriodic(700, doNothing -> {
             if (HttpServer.startSinglePolicyUpdateStarted.get() && singlePolicyUpdateOpenConnections.get() < HttpServer.singlePolicyUpdateOpenConnections.get()) {
-                for (int index = 0; index < 50; index++) {
+                for (int index = 0; index < 70; index++) {
                     sendRequestToRemote();
                 }
             }

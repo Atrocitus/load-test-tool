@@ -125,7 +125,7 @@ public class HttpServer extends AbstractVerticle {
             JsonObject json = context.getBodyAsJson();
             require(json != null, "No request body");
             durationInSeconds = json.getLong("durationInSeconds");
-            rampUpTimeInSeconds = json.getDouble("rampUpTimeInSeconds", 20D);
+            rampUpTimeInSeconds = json.getDouble("rampUpTimeInSeconds", 10D);
             Integer concurrentRequests = json.getInteger("concurrentRequests");
             require(durationInSeconds != null && durationInSeconds > 0, "Duration to run the tests should be defined in minutes using variable 'durationInSeconds'");
             require(concurrentRequests != null && concurrentRequests > 0, "Concurrent requests size should be defined as number using variable 'concurrentRequests'");
