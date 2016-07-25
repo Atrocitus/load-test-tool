@@ -60,8 +60,12 @@ public class HttpServer extends AbstractVerticle {
     public static AtomicLong openSyncCount = new AtomicLong(0);
     public static AtomicLong openItemOperationsCount = new AtomicLong(0);
 
+    public static int pingRequestsPerSecond = 0;
+    public static int syncRequestsPerSecond = 0;
+    public static int itemOperationRequestsPerSecond = 0;
     public static MultiMap headers = null;
     public static List<Device> devices = CsvReader.createDevices();
+    private long testStartTime = 0;
 
     @Override
     public void start() {
@@ -87,7 +91,8 @@ public class HttpServer extends AbstractVerticle {
         server.requestHandler(router::accept).listen(port);
 
         vertx.setPeriodic(5000, doNothing -> {
-            System.out.println("\nOpen connections to remote server = " + openConnections
+            long testDuration = testStartTime > 0 ? ((System.currentTimeMillis() - testStartTime) / 1000) : 0;
+            System.out.println("\n Test Duration = " + testDuration + " Seconds. Open connections to remote server = " + openConnections
                     + ". Total requests = " + totalRequests + ". Success = " + successCount
                     + ". Error = " + errorCount + ". Error types with count = " + errorsType + ". Ping {" + totalPingCount + ", " + openPingCount + "}"
                     + ". Sync {" + totalSyncCount + ", " + openSyncCount + "}"
@@ -116,6 +121,8 @@ public class HttpServer extends AbstractVerticle {
         router.route().handler(BodyHandler.create()).failureHandler(context -> {
             Throwable exception = ((io.vertx.ext.web.RoutingContext) context.getDelegate()).failure();
             LOGGER.error("Unable to handle request {}", context.getBodyAsString(), exception);
+            testInProgress.set(false);
+            testStartTime = 0;
             context.response().setChunked(true).write("Error : " + exception.getMessage()).end();
         });
         router.post("/load/start").handler(context -> startLoadTest(context));
@@ -127,30 +134,52 @@ public class HttpServer extends AbstractVerticle {
 
     private void startLoadTest(final RoutingContext context) {
         if (testInProgress.compareAndSet(false, true)) {
+
             resetMetrics();
             JsonObject json = context.getBodyAsJson();
             require(json != null, "No request body");
+
             durationInSeconds = json.getLong("durationInSeconds");
-            rampUpTimeInSeconds = json.getDouble("rampUpTimeInSeconds", 10D);
-
-            int maxOpenConcurrentConnections = json.getInteger("maxOpenConnections", 0);
-            require(maxOpenConcurrentConnections > 0, "Define 'maxOpenConnections'");
-            maxOpenConnections.set(maxOpenConcurrentConnections);
-
-            pingPercentage = json.getInteger("pingPercentage", 0);
-            syncPercentage = json.getInteger("syncPercentage", 0);
-            itemOperationPercentage = json.getInteger("itemOperationPercentage", 0);
-
             require(durationInSeconds != null && durationInSeconds > 0, "Duration to run the tests should be defined in minutes using variable 'durationInSeconds'");
-            require(pingPercentage > 0, "Define 'pingPercentage'");
-            require(syncPercentage > 0, "Define 'syncPercentage'");
-            require(itemOperationPercentage > 0, "Define 'itemOperationPercentage'");
+
+            rampUpTimeInSeconds = json.getDouble("rampUpTimeInSeconds", 10D);
+            require(rampUpTimeInSeconds != null && rampUpTimeInSeconds > 0, "Provide 'rampUpTimeInSeconds'");
 
             remoteHostsWithPortAndProtocol = json.getJsonArray("remoteHostsWithPortAndProtocol");
             require(remoteHostsWithPortAndProtocol != null && remoteHostsWithPortAndProtocol.size() > 0, "Define the remote hosts as array with name 'remoteHostsWithPortAndProtocol'");
             remoteMethod = json.getString("remoteMethod", "POST");
-            testStarted.set(true);
 
+            String testType = json.getString("testType");
+            require("requestPerSecond".equalsIgnoreCase(testType) || "concurrentUsers".equalsIgnoreCase(testType), "Define test type 'testType' as 'requestPerSecond' or 'concurrentUsers'");
+
+            if ("requestPerSecond".equalsIgnoreCase(testType)) {
+                pingRequestsPerSecond = json.getInteger("pingRequestsPerSecond", 0);
+                syncRequestsPerSecond = json.getInteger("syncRequestsPerSecond", 0);
+                itemOperationRequestsPerSecond = json.getInteger("itemOperationRequestsPerSecond", 0);
+
+                require(pingRequestsPerSecond > 0, "Define 'pingRequestsPerSecond'");
+                require(syncRequestsPerSecond > 0, "Define 'syncRequestsPerSecond'");
+                require(itemOperationRequestsPerSecond > 0, "Define 'itemOperationRequestsPerSecond'");
+
+                vertx.eventBus().send("scheduleTest", LoadTestType.REQUEST_PER_SECOND.toString());
+            } else {
+
+                int maxOpenConcurrentConnections = json.getInteger("maxOpenConnections", 0);
+                require(maxOpenConcurrentConnections > 0, "Define 'maxOpenConnections'");
+                maxOpenConnections.set(maxOpenConcurrentConnections);
+
+                pingPercentage = json.getInteger("pingPercentage", 0);
+                syncPercentage = json.getInteger("syncPercentage", 0);
+                itemOperationPercentage = json.getInteger("itemOperationPercentage", 0);
+
+                require(pingPercentage > 0, "Define 'pingPercentage'");
+                require(syncPercentage > 0, "Define 'syncPercentage'");
+                require(itemOperationPercentage > 0, "Define 'itemOperationPercentage'");
+
+                vertx.eventBus().send("scheduleTest", LoadTestType.CONCURRENT_OPEN_CONNECTIONS.toString());
+            }
+
+            testStarted.set(true);
 
             vertx.setTimer(durationInSeconds * 1000, doNothing -> {
                 System.out.println("*************************************************************************************");
@@ -166,6 +195,7 @@ public class HttpServer extends AbstractVerticle {
     }
 
     private void resetMetrics() {
+        testStartTime = System.currentTimeMillis();
         totalPingCount.set(0);
         totalSyncCount.set(0);
         totalItemOperationsCount.set(0);
@@ -217,5 +247,6 @@ public class HttpServer extends AbstractVerticle {
         startSinglePolicyUpdateStarted.set(false);
         rampUpTimeMultiplier = 0D;
         rampUpTimeCounter = 0;
+        vertx.eventBus().send("stopTests", null);
     }
 }

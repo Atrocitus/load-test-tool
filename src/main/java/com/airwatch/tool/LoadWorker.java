@@ -6,6 +6,8 @@ import io.vertx.rxjava.core.http.HttpClientResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.airwatch.tool.HttpServer.*;
@@ -17,71 +19,122 @@ public class LoadWorker extends AbstractVerticle {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LoadWorker.class);
 
+    private List<Long> timers = new ArrayList<>();
+
     @Override
     public void start() {
+        vertx.eventBus().consumer("scheduleTest", event -> {
+            LoadTestType testType = LoadTestType.valueOf(event.body().toString());
+            if (testType == LoadTestType.REQUEST_PER_SECOND) {
+                scheduleRequestsPerSecondTimer();
+            } else {
+                scheduleUsersBaseTimer();
+            }
+        });
 
-        vertx.setPeriodic(100, doNothing -> {
+        vertx.eventBus().consumer("stopTests", event -> {
+            timers.forEach(id -> {
+                vertx.cancelTimer(id);
+            });
+        });
+    }
+
+    private void scheduleUsersBaseTimer() {
+        timers.add(vertx.setPeriodic(100, doNothing -> {
             if (testStarted.get() && openConnections.get() < maxOpenConnections.get() * rampUpTimeMultiplier) {
                 for (int index = 0; index < 70 * rampUpTimeMultiplier; index++) {
                     if (openConnections.get() < maxOpenConnections.get()) {
-                        sendPing();
-                        sendSync();
-                        sendItemOperations();
+                        sendPingWithPercentage();
+                        sendSyncWithPercentage();
+                        sendItemOperationsWithPercentage();
                     }
                 }
             }
-        });
+        }));
 
-        vertx.setPeriodic(200, doNothing -> {
+        timers.add(vertx.setPeriodic(200, doNothing -> {
             if (testStarted.get() && openConnections.get() < maxOpenConnections.get() * rampUpTimeMultiplier) {
                 for (int index = 0; index < 120 * rampUpTimeMultiplier; index++) {
                     if (openConnections.get() < maxOpenConnections.get()) {
-                        sendPing();
-                        sendSync();
-                        sendItemOperations();
+                        sendPingWithPercentage();
+                        sendSyncWithPercentage();
+                        sendItemOperationsWithPercentage();
                     }
                 }
             }
-        });
+        }));
 
-        vertx.setPeriodic(300, doNothing -> {
+        timers.add(vertx.setPeriodic(300, doNothing -> {
             if (testStarted.get() && openConnections.get() < maxOpenConnections.get() * rampUpTimeMultiplier) {
                 for (int index = 0; index < 180 * rampUpTimeMultiplier; index++) {
                     if (openConnections.get() < maxOpenConnections.get()) {
-                        sendPing();
-                        sendSync();
-                        sendItemOperations();
+                        sendPingWithPercentage();
+                        sendSyncWithPercentage();
+                        sendItemOperationsWithPercentage();
                     }
                 }
             }
-        });
+        }));
+    }
+
+    private void scheduleRequestsPerSecondTimer() {
+
+        timers.add(vertx.setPeriodic(1000, doNothing -> {
+            for (int index = 0; index < pingRequestsPerSecond * rampUpTimeMultiplier; index++) {
+                sendPing();
+            }
+        }));
+
+        timers.add(vertx.setPeriodic(1000, doNothing -> {
+            for (int index = 0; index < syncRequestsPerSecond * rampUpTimeMultiplier; index++) {
+                sendSync();
+            }
+        }));
+
+        timers.add(vertx.setPeriodic(1000, doNothing -> {
+            for (int index = 0; index < itemOperationRequestsPerSecond * rampUpTimeMultiplier; index++) {
+                sendItemOperations();
+            }
+        }));
+    }
+
+    private void sendPingWithPercentage() {
+        long percentage = totalPingCount.get() * 100 / totalRequests.get();
+        if (percentage < pingPercentage) {
+            sendPing();
+        }
+    }
+
+    private void sendSyncWithPercentage() {
+        long percentage = totalSyncCount.get() * 100 / totalRequests.get();
+        if (percentage < syncPercentage) {
+            sendSync();
+        }
+    }
+
+    private void sendItemOperationsWithPercentage() {
+        long percentage = totalItemOperationsCount.get() * 100 / totalRequests.get();
+        if (percentage < itemOperationPercentage) {
+            sendItemOperations();
+        }
     }
 
     private void sendPing() {
-        long percentage = totalPingCount.get() * 100 / totalRequests.get();
-        if (percentage < pingPercentage) {
-            totalPingCount.incrementAndGet();
-            openPingCount.incrementAndGet();
-            sendRequestToRemote(CommandType.PING);
-        }
+        totalPingCount.incrementAndGet();
+        openPingCount.incrementAndGet();
+        sendRequestToRemote(CommandType.PING);
     }
 
     private void sendSync() {
-        long percentage = totalSyncCount.get() * 100 / totalRequests.get();
-        if (percentage < syncPercentage) {
-            totalSyncCount.incrementAndGet();
-            openSyncCount.incrementAndGet();
-            sendRequestToRemote(CommandType.SYNC);
-        }
+        totalSyncCount.incrementAndGet();
+        openSyncCount.incrementAndGet();
+        sendRequestToRemote(CommandType.SYNC);
     }
 
     private void sendItemOperations() {
-        long percentage = totalItemOperationsCount.get() * 100 / totalRequests.get();
-        if (percentage < itemOperationPercentage) {
-            totalItemOperationsCount.incrementAndGet();
-            openItemOperationsCount.incrementAndGet();
-            sendRequestToRemote(CommandType.ITEM_OPERATIONS);
-        }
+        totalItemOperationsCount.incrementAndGet();
+        openItemOperationsCount.incrementAndGet();
+        sendRequestToRemote(CommandType.ITEM_OPERATIONS);
     }
 
     private void sendRequestToRemote(final CommandType commandType) {
@@ -90,7 +143,7 @@ public class LoadWorker extends AbstractVerticle {
 
         int random = (int) (Math.random() * ((devices.size() - 1) + 1));
         Device device = devices.get(random);
-        StringBuilder builder = new StringBuilder(commandType.serverUriAndCommand).append("DeviceId=").append(device.getEasDeviceId())
+        StringBuilder builder = new StringBuilder(commandType.getServerUriAndCommand()).append("DeviceId=").append(device.getEasDeviceId())
                 .append("&User=").append(device.getUserId()).append("&DeviceType=").append(device.getEasDeviceType());
         String uriPath = builder.toString();
         String remoteHost = remoteHostsWithPortAndProtocol.getString((int) (Math.random() * ((remoteHostsWithPortAndProtocol.size() - 1) + 1)));
@@ -156,19 +209,6 @@ public class LoadWorker extends AbstractVerticle {
                 break;
             default:
                 openItemOperationsCount.decrementAndGet();
-
-        }
-    }
-
-    private enum CommandType {
-        SYNC("/Microsoft-Server-ActiveSync?Cmd=Sync&"),
-        PING("/Microsoft-Server-ActiveSync?Cmd=Ping&"),
-        ITEM_OPERATIONS("/Microsoft-Server-ActiveSync?Cmd=ItemOperations&");
-
-        private String serverUriAndCommand;
-
-        CommandType(String commandUrlParam) {
-            this.serverUriAndCommand = commandUrlParam;
         }
     }
 }
