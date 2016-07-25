@@ -35,28 +35,31 @@ public class HttpServer extends AbstractVerticle {
     public static AtomicBoolean startSinglePolicyUpdateSubmit = new AtomicBoolean(false);
     public static AtomicBoolean startSinglePolicyUpdateStarted = new AtomicBoolean(false);
     public static AtomicLong maxOpenConnections = new AtomicLong(0);
-    public static int pingPercentage = 0;
-    public static int syncPercentage = 0;
-    public static int itemOperationPercentage = 0;
-
     public static AtomicLong singlePolicyUpdateOpenConnections = new AtomicLong(0);
 
     public static String remoteMethod;
+
     public static JsonArray remoteHostsWithPortAndProtocol = new JsonArray();
     public static JsonArray singlePolicyUpdateHostsWithPortAndProtocol = new JsonArray();
-
     public static int rampUpTimeCounter = 0;
-    public static Double rampUpTimeMultiplier = 0D;
 
+    public static Double rampUpTimeMultiplier = 0D;
     public static Long durationInSeconds;
+
     public static Double rampUpTimeInSeconds;
     public static Long singlePolicyUpdateDurationInSeconds;
+
+
+    public static int pingPercentage = 0;
+    public static int syncPercentage = 0;
+    public static int itemOperationPercentage = 0;
     public static AtomicLong totalPingCount = new AtomicLong(0);
     public static AtomicLong totalSyncCount = new AtomicLong(0);
     public static AtomicLong totalItemOperationsCount = new AtomicLong(0);
     public static AtomicLong openPingCount = new AtomicLong(0);
     public static AtomicLong openSyncCount = new AtomicLong(0);
     public static AtomicLong openItemOperationsCount = new AtomicLong(0);
+
     public static MultiMap headers = null;
     public static List<Device> devices = CsvReader.createDevices();
 
