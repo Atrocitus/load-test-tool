@@ -29,12 +29,15 @@ public class HttpServer extends AbstractVerticle {
     public static AtomicLong openConnections = new AtomicLong(0);
     public static AtomicLong errorCount = new AtomicLong(0);
     public static AtomicLong successCount = new AtomicLong(0);
-    public static AtomicLong totalRequests = new AtomicLong(0);
+    public static AtomicLong totalRequests = new AtomicLong(1);
     public static AtomicBoolean testInProgress = new AtomicBoolean(false);
     public static AtomicBoolean testStarted = new AtomicBoolean(false);
     public static AtomicBoolean startSinglePolicyUpdateSubmit = new AtomicBoolean(false);
     public static AtomicBoolean startSinglePolicyUpdateStarted = new AtomicBoolean(false);
     public static AtomicLong maxOpenConnections = new AtomicLong(0);
+    public static int pingPercentage = 0;
+    public static int syncPercentage = 0;
+    public static int itemOperationPercentage = 0;
 
     public static AtomicLong singlePolicyUpdateOpenConnections = new AtomicLong(0);
 
@@ -126,14 +129,26 @@ public class HttpServer extends AbstractVerticle {
             require(json != null, "No request body");
             durationInSeconds = json.getLong("durationInSeconds");
             rampUpTimeInSeconds = json.getDouble("rampUpTimeInSeconds", 10D);
-            Integer concurrentRequests = json.getInteger("concurrentRequests");
+
+            int maxOpenConcurrentConnections = json.getInteger("maxOpenConnections", 0);
+            require(maxOpenConcurrentConnections > 0, "Define 'maxOpenConnections'");
+            maxOpenConnections.set(maxOpenConcurrentConnections);
+
+            pingPercentage = json.getInteger("pingPercentage", 0);
+            syncPercentage = json.getInteger("syncPercentage", 0);
+            itemOperationPercentage = json.getInteger("itemOperationPercentage", 0);
+
             require(durationInSeconds != null && durationInSeconds > 0, "Duration to run the tests should be defined in minutes using variable 'durationInSeconds'");
-            require(concurrentRequests != null && concurrentRequests > 0, "Concurrent requests size should be defined as number using variable 'concurrentRequests'");
+            require(pingPercentage > 0, "Define 'pingPercentage'");
+            require(syncPercentage > 0, "Define 'syncPercentage'");
+            require(itemOperationPercentage > 0, "Define 'itemOperationPercentage'");
+
             remoteHostsWithPortAndProtocol = json.getJsonArray("remoteHostsWithPortAndProtocol");
             require(remoteHostsWithPortAndProtocol != null && remoteHostsWithPortAndProtocol.size() > 0, "Define the remote hosts as array with name 'remoteHostsWithPortAndProtocol'");
-            maxOpenConnections.set(concurrentRequests);
             remoteMethod = json.getString("remoteMethod", "POST");
             testStarted.set(true);
+
+
             vertx.setTimer(durationInSeconds * 1000, doNothing -> {
                 System.out.println("*************************************************************************************");
                 System.out.println("Stopping the test to make any further request!!!");
@@ -157,7 +172,7 @@ public class HttpServer extends AbstractVerticle {
         openItemOperationsCount.set(0);
 
         openConnections.set(0);
-        totalRequests.set(0);
+        totalRequests.set(1);
         errorCount.set(0);
         successCount.set(0);
 

@@ -6,7 +6,6 @@ import io.vertx.rxjava.core.http.HttpClientResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Locale;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.airwatch.tool.HttpServer.*;
@@ -17,9 +16,6 @@ import static com.airwatch.tool.HttpServer.*;
 public class LoadWorker extends AbstractVerticle {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LoadWorker.class);
-    private static String pingURL = "/Microsoft-Server-ActiveSync?Cmd=Ping&";
-    private static String syncURL = "/Microsoft-Server-ActiveSync?Cmd=Sync&";
-    private static String itemOperationsURL = "/Microsoft-Server-ActiveSync?Cmd=ItemOperations&";
 
     @Override
     public void start() {
@@ -28,7 +24,9 @@ public class LoadWorker extends AbstractVerticle {
             if (testStarted.get() && openConnections.get() < maxOpenConnections.get() * rampUpTimeMultiplier) {
                 for (int index = 0; index < 70 * rampUpTimeMultiplier; index++) {
                     if (openConnections.get() < maxOpenConnections.get()) {
-                        sendRequestToRemote();
+                        sendPing();
+                        sendSync();
+                        sendItemOperations();
                     }
                 }
             }
@@ -38,7 +36,9 @@ public class LoadWorker extends AbstractVerticle {
             if (testStarted.get() && openConnections.get() < maxOpenConnections.get() * rampUpTimeMultiplier) {
                 for (int index = 0; index < 120 * rampUpTimeMultiplier; index++) {
                     if (openConnections.get() < maxOpenConnections.get()) {
-                        sendRequestToRemote();
+                        sendPing();
+                        sendSync();
+                        sendItemOperations();
                     }
                 }
             }
@@ -48,63 +48,67 @@ public class LoadWorker extends AbstractVerticle {
             if (testStarted.get() && openConnections.get() < maxOpenConnections.get() * rampUpTimeMultiplier) {
                 for (int index = 0; index < 180 * rampUpTimeMultiplier; index++) {
                     if (openConnections.get() < maxOpenConnections.get()) {
-                        sendRequestToRemote();
+                        sendPing();
+                        sendSync();
+                        sendItemOperations();
                     }
                 }
             }
         });
     }
 
-    private void sendRequestToRemote() {
+    private void sendPing() {
+        long percentage = totalPingCount.get() * 100 / totalRequests.get();
+        if (percentage < pingPercentage) {
+            totalPingCount.incrementAndGet();
+            openPingCount.incrementAndGet();
+            sendRequestToRemote(CommandType.PING);
+        }
+    }
+
+    private void sendSync() {
+        long percentage = totalSyncCount.get() * 100 / totalRequests.get();
+        if (percentage < syncPercentage) {
+            totalSyncCount.incrementAndGet();
+            openSyncCount.incrementAndGet();
+            sendRequestToRemote(CommandType.SYNC);
+        }
+    }
+
+    private void sendItemOperations() {
+        long percentage = totalItemOperationsCount.get() * 100 / totalRequests.get();
+        if (percentage < itemOperationPercentage) {
+            totalItemOperationsCount.incrementAndGet();
+            openItemOperationsCount.incrementAndGet();
+            sendRequestToRemote(CommandType.ITEM_OPERATIONS);
+        }
+    }
+
+    private void sendRequestToRemote(final CommandType commandType) {
         openConnections.incrementAndGet();
         totalRequests.incrementAndGet();
 
-        // We don't want to rely on random selector as it won't guarantee the equal number of requests for each command type.
-        String uriPath = pingURL;
-        if (totalPingCount.get() > totalSyncCount.get()) {
-            uriPath = syncURL;
-        } else if (totalPingCount.get() > totalItemOperationsCount.get()) {
-            uriPath = itemOperationsURL;
-        }
         int random = (int) (Math.random() * ((devices.size() - 1) + 1));
         Device device = devices.get(random);
-        StringBuilder builder = new StringBuilder(uriPath).append("DeviceId=").append(device.getEasDeviceId())
+        StringBuilder builder = new StringBuilder(commandType.serverUriAndCommand).append("DeviceId=").append(device.getEasDeviceId())
                 .append("&User=").append(device.getUserId()).append("&DeviceType=").append(device.getEasDeviceType());
-        uriPath = builder.toString();
-        String uriPathLowercase = uriPath.toLowerCase(Locale.ENGLISH);
-        final boolean ping = uriPathLowercase.contains("cmd=ping");
-        final boolean sync = uriPathLowercase.contains("cmd=sync");
-        if (ping) {
-            totalPingCount.incrementAndGet();
-            openPingCount.incrementAndGet();
-        } else if (sync) {
-            totalSyncCount.incrementAndGet();
-            openSyncCount.incrementAndGet();
-        } else {
-            totalItemOperationsCount.incrementAndGet();
-            openItemOperationsCount.incrementAndGet();
-        }
+        String uriPath = builder.toString();
         String remoteHost = remoteHostsWithPortAndProtocol.getString((int) (Math.random() * ((remoteHostsWithPortAndProtocol.size() - 1) + 1)));
-
         HttpClientRequest clientRequest;
-        if ("OPTIONS".equalsIgnoreCase(remoteMethod)) {
-            clientRequest = ClientUtil.createClient(remoteHost, vertx).options(uriPath);
-        } else {
-            clientRequest = ClientUtil.createClient(remoteHost, vertx).post(uriPath);
-        }
+        clientRequest = ClientUtil.createClient(remoteHost, vertx).post(uriPath);
         clientRequest.toObservable().subscribe(httpClientResponse -> {
             RxSupport.observeBody(httpClientResponse).subscribe(buffer -> {
                 // Read the full response otherwise it will cause "Cannot assign requested address" error.
             }, ex -> {
 
             }, () -> {
-                checkResponse(httpClientResponse, remoteHost, ping, sync);
+                checkResponse(httpClientResponse, remoteHost, commandType);
                 // Got response from email server.
                 openConnections.decrementAndGet();
-                decrementCommandCount(ping, sync);
+                decrementCommandCount(commandType);
             });
         }, ex -> {
-            decrementCommandCount(ping, sync);
+            decrementCommandCount(commandType);
             countError(ex);
             LOGGER.error("Error while connecting to remote host", ex);
         });
@@ -112,10 +116,9 @@ public class LoadWorker extends AbstractVerticle {
         clientRequest.end();
     }
 
-    private void checkResponse(HttpClientResponse httpClientResponse, String remoteHost, boolean ping, boolean sync) {
-        String requestType = ping ? "PING" : sync ? "SYNC" : "ItemOperation";
+    private void checkResponse(HttpClientResponse httpClientResponse, String remoteHost, CommandType commandType) {
         if (httpClientResponse.statusCode() != 200) {
-            String statusCodeKey = httpClientResponse.statusCode() + " :: " + remoteHost + " :: " + requestType;
+            String statusCodeKey = httpClientResponse.statusCode() + " :: " + remoteHost + " :: " + commandType;
             AtomicLong non200Response = non200Responses.get(statusCodeKey);
             if (non200Response == null) {
                 non200Response = new AtomicLong(0);
@@ -143,13 +146,30 @@ public class LoadWorker extends AbstractVerticle {
         openConnections.decrementAndGet();
     }
 
-    private void decrementCommandCount(final boolean ping, final boolean sync) {
-        if (ping) {
-            openPingCount.decrementAndGet();
-        } else if (sync) {
-            openSyncCount.decrementAndGet();
-        } else {
-            openItemOperationsCount.decrementAndGet();
+    private void decrementCommandCount(final CommandType commandType) {
+        switch (commandType) {
+            case PING:
+                openPingCount.decrementAndGet();
+                break;
+            case SYNC:
+                openSyncCount.decrementAndGet();
+                break;
+            default:
+                openItemOperationsCount.decrementAndGet();
+
+        }
+    }
+
+    private enum CommandType {
+
+        SYNC("/Microsoft-Server-ActiveSync?Cmd=Sync&"),
+        PING("/Microsoft-Server-ActiveSync?Cmd=Ping&"),
+        ITEM_OPERATIONS("/Microsoft-Server-ActiveSync?Cmd=ItemOperations&");
+
+        private String serverUriAndCommand;
+
+        CommandType(String commandUrlParam) {
+            this.serverUriAndCommand = commandUrlParam;
         }
     }
 }
