@@ -150,7 +150,7 @@ public class HttpServer extends AbstractVerticle {
             remoteMethod = json.getString("remoteMethod", "POST");
 
             String testType = json.getString("testType");
-            require("requestPerSecond".equalsIgnoreCase(testType) || "concurrentUsers".equalsIgnoreCase(testType), "Define test type 'testType' as 'requestPerSecond' or 'concurrentUsers'");
+            require("requestPerSecond".equalsIgnoreCase(testType) || "concurrentUsers".equalsIgnoreCase(testType), "Define 'testType' parameter value as 'requestPerSecond' or 'concurrentUsers'");
 
             if ("requestPerSecond".equalsIgnoreCase(testType)) {
                 pingRequestsPerSecond = json.getInteger("pingRequestsPerSecond", 0);
