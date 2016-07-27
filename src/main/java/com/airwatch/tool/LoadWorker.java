@@ -6,6 +6,8 @@ import io.vertx.rxjava.core.http.HttpClientResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
@@ -143,12 +145,17 @@ public class LoadWorker extends AbstractVerticle {
 
         int random = (int) (Math.random() * ((devices.size() - 1) + 1));
         Device device = devices.get(random);
-        StringBuilder builder = new StringBuilder(commandType.getServerUriAndCommand()).append("DeviceId=").append(device.getEasDeviceId())
-                .append("&User=").append(device.getUserId()).append("&DeviceType=").append(device.getEasDeviceType());
-        String uriPath = builder.toString();
+        StringBuilder builder = new StringBuilder().append("/Microsoft-Server-ActiveSync?")
+                .append(commandType.getCommand()).append("DeviceId=").append(device.getEasDeviceId())
+                .append("&DeviceType=").append(device.getEasDeviceType());
+        try {
+            builder.append("&User=").append(URLEncoder.encode(device.getUserId(), "UTF-8"));
+        } catch (UnsupportedEncodingException e) {
+            e.printStackTrace();
+        }
         String remoteHost = remoteHostsWithPortAndProtocol.getString((int) (Math.random() * ((remoteHostsWithPortAndProtocol.size() - 1) + 1)));
         HttpClientRequest clientRequest;
-        clientRequest = ClientUtil.createClient(remoteHost, vertx).post(uriPath);
+        clientRequest = ClientUtil.createClient(remoteHost, vertx).post(builder.toString());
         clientRequest.toObservable().subscribe(httpClientResponse -> {
             RxSupport.observeBody(httpClientResponse).subscribe(buffer -> {
                 // Read the full response otherwise it will cause "Cannot assign requested address" error.

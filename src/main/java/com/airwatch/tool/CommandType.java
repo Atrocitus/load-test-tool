@@ -5,17 +5,17 @@ package com.airwatch.tool;
  */
 public enum CommandType {
 
-    SYNC("/Microsoft-Server-ActiveSync?Cmd=Sync&"),
-    PING("/Microsoft-Server-ActiveSync?Cmd=Ping&"),
-    ITEM_OPERATIONS("/Microsoft-Server-ActiveSync?Cmd=ItemOperations&");
+    SYNC("Cmd=Sync&"),
+    PING("Cmd=Ping&"),
+    ITEM_OPERATIONS("Cmd=ItemOperations&");
 
-    private String serverUriAndCommand;
+    private String command;
 
     CommandType(String commandUrlParam) {
-        this.serverUriAndCommand = commandUrlParam;
+        this.command = commandUrlParam;
     }
 
-    public String getServerUriAndCommand() {
-        return serverUriAndCommand;
+    public String getCommand() {
+        return command;
     }
 }
