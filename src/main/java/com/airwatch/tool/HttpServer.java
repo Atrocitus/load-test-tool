@@ -157,9 +157,9 @@ public class HttpServer extends AbstractVerticle {
                 syncRequestsPerSecond = json.getInteger("syncRequestsPerSecond", 0);
                 itemOperationRequestsPerSecond = json.getInteger("itemOperationRequestsPerSecond", 0);
 
-                require(pingRequestsPerSecond > 0, "Define 'pingRequestsPerSecond'");
-                require(syncRequestsPerSecond > 0, "Define 'syncRequestsPerSecond'");
-                require(itemOperationRequestsPerSecond > 0, "Define 'itemOperationRequestsPerSecond'");
+                require(pingRequestsPerSecond > -1, "Define 'pingRequestsPerSecond'");
+                require(syncRequestsPerSecond > -1, "Define 'syncRequestsPerSecond'");
+                require(itemOperationRequestsPerSecond > -1, "Define 'itemOperationRequestsPerSecond'");
 
                 vertx.eventBus().send("scheduleTest", LoadTestType.REQUEST_PER_SECOND.toString());
             } else {
