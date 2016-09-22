@@ -1,13 +1,16 @@
 package com.airwatch.tool;
 
+import io.vertx.core.json.JsonObject;
 import io.vertx.rxjava.core.AbstractVerticle;
 import io.vertx.rxjava.core.http.HttpClientRequest;
 import io.vertx.rxjava.core.http.HttpClientResponse;
 
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.airwatch.tool.HttpServer.singlePolicyUpdateHostsWithPortAndProtocol;
+import static com.airwatch.tool.HttpServer.singlePolicyUpdateRequestsPerSecond;
 
 /**
  * Created by manishk on 7/1/16.
@@ -24,61 +27,19 @@ public class SendSinglePolicyUpdate extends AbstractVerticle {
     @Override
     public void start() {
 
-        vertx.setPeriodic(200, doNothing -> {
-            if (HttpServer.startSinglePolicyUpdateStarted.get() && singlePolicyUpdateOpenConnections.get() < HttpServer.singlePolicyUpdateOpenConnections.get()) {
-                for (int index = 0; index < 30; index++) {
+        vertx.setPeriodic(1000, doNothing -> {
+            if (HttpServer.startSinglePolicyUpdateStarted.get()) {
+                for (int index = 0; index < singlePolicyUpdateRequestsPerSecond; index++) {
                     sendRequestToRemote();
                 }
             }
         });
-        vertx.setPeriodic(500, doNothing -> {
-            if (HttpServer.startSinglePolicyUpdateStarted.get() && singlePolicyUpdateOpenConnections.get() < HttpServer.singlePolicyUpdateOpenConnections.get()) {
-                for (int index = 0; index < 50; index++) {
-                    sendRequestToRemote();
-                }
-            }
-        });
-        vertx.setPeriodic(700, doNothing -> {
-            if (HttpServer.startSinglePolicyUpdateStarted.get() && singlePolicyUpdateOpenConnections.get() < HttpServer.singlePolicyUpdateOpenConnections.get()) {
-                for (int index = 0; index < 70; index++) {
-                    sendRequestToRemote();
-                }
-            }
-        });
-
-//        vertx.setPeriodic(200, doNothing -> {
-//            if (HttpServer.startSinglePolicyUpdateStarted.get() && singlePolicyUpdateOpenConnections.get() < HttpServer.singlePolicyUpdateOpenConnections.get()) {
-//                for (int index = 0; index < 30; index++) {
-//                    sendRequestToRemote();
-//                }
-//            }
-//        });
-//        vertx.setPeriodic(200, doNothing -> {
-//            if (HttpServer.startSinglePolicyUpdateStarted.get() && singlePolicyUpdateOpenConnections.get() < HttpServer.singlePolicyUpdateOpenConnections.get()) {
-//                for (int index = 0; index < 50; index++) {
-//                    sendRequestToRemote();
-//                }
-//            }
-//        });
-//        vertx.setPeriodic(300, doNothing -> {
-//            if (HttpServer.startSinglePolicyUpdateStarted.get() && singlePolicyUpdateOpenConnections.get() < HttpServer.singlePolicyUpdateOpenConnections.get()) {
-//                for (int index = 0; index < 70; index++) {
-//                    sendRequestToRemote();
-//                }
-//            }
-//        });
-//        vertx.setPeriodic(400, doNothing -> {
-//            if (HttpServer.startSinglePolicyUpdateStarted.get() && singlePolicyUpdateOpenConnections.get() < HttpServer.singlePolicyUpdateOpenConnections.get()) {
-//                for (int index = 0; index < 70; index++) {
-//                    sendRequestToRemote();
-//                }
-//            }
-//        });
 
         vertx.setPeriodic(5000, doNothing -> {
             if (HttpServer.startSinglePolicyUpdateStarted.get()) {
                 System.out.println("\nSingle Policy Update to remote server = " + singlePolicyUpdateOpenConnections
                         + ". Total requests = " + totalSinglePolicyRequests + ". Success = " + successCount
+                        + ". Requests/second = " + singlePolicyUpdateRequestsPerSecond
                         + ". Error = " + errorCount + ". Non 200 response " + non200Responses);
             }
         });
@@ -96,10 +57,13 @@ public class SendSinglePolicyUpdate extends AbstractVerticle {
             checkResponse(httpClientResponse, remoteHost);
             singlePolicyUpdateOpenConnections.decrementAndGet();
         }, ex -> {
+            ex.printStackTrace();
             countError(ex);
         });
         String payload = "{\"AllowSync\":null,\"AwDeviceId\":552,\"BrowserUriScheme\":\"awb:\\/\\/\",\"BrowserUriSecureScheme\":\"awbs:\\/\\/\",\"CreatedDateTime\":\"\\/Date(-62135578800000)\\/\",\"DaysSinceLastActivity\":0,\"DeviceIdentifier\":\"BE6330CAE8BC441EBCF65555B9E31114\",\"DevicePolicyLoadEndTime\":\"\\/Date(-62135578800000)\\/\",\"DevicePolicyLoadStartTime\":\"\\/Date(-62135578800000)\\/\",\"DeviceType\":2,\"EasDeviceIdentifier\":\"BE6330CAE8BC441EBCF65555B9E31114\",\"EasProfileInstall\":false,\"FullDeviceIdentifier\":\"BE6330CAE8BC441EBCF65555B9E31114\",\"IsCompromised\":false,\"IsDataProtected\":true,\"IsEnrolled\":true,\"IsManaged\":true,\"IsModelCompliant\":true,\"IsNotMDMCompliant\":false,\"IsOsCompliant\":true,\"MemConfigId\":27,\"MemDeviceId\":7653,\"MobileEmailDiagnosticsEnabled\":false,\"RemoveDevice\":false}";
-        clientRequest.setChunked(true).write(payload).end();
+        JsonObject json = new JsonObject(payload);
+        json.put("EasDeviceIdentifier", UUID.randomUUID().toString()); // 10.44.74.88
+        clientRequest.setChunked(true).write(json.toString()).end();
     }
 
     private void countError(Throwable ex) {

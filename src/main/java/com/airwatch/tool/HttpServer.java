@@ -35,12 +35,12 @@ public class HttpServer extends AbstractVerticle {
     public static AtomicBoolean startSinglePolicyUpdateSubmit = new AtomicBoolean(false);
     public static AtomicBoolean startSinglePolicyUpdateStarted = new AtomicBoolean(false);
     public static AtomicLong maxOpenConnections = new AtomicLong(0);
-    public static AtomicLong singlePolicyUpdateOpenConnections = new AtomicLong(0);
 
     public static String remoteMethod;
 
     public static JsonArray remoteHostsWithPortAndProtocol = new JsonArray();
     public static JsonArray singlePolicyUpdateHostsWithPortAndProtocol = new JsonArray();
+    public static Integer singlePolicyUpdateRequestsPerSecond = 100;
     public static int rampUpTimeCounter = 0;
 
     public static Double rampUpTimeMultiplier = 0D;
@@ -122,6 +122,7 @@ public class HttpServer extends AbstractVerticle {
             Throwable exception = ((io.vertx.ext.web.RoutingContext) context.getDelegate()).failure();
             LOGGER.error("Unable to handle request {}", context.getBodyAsString(), exception);
             testInProgress.set(false);
+            startSinglePolicyUpdateSubmit.set(false);
             testStartTime = 0;
             context.response().setChunked(true).write("Error : " + exception.getMessage()).end();
         });
@@ -216,9 +217,10 @@ public class HttpServer extends AbstractVerticle {
     private void startSinglePolicyUpdate(final RoutingContext context) {
         if (startSinglePolicyUpdateSubmit.compareAndSet(false, true)) {
             JsonObject json = context.getBodyAsJson();
+            singlePolicyUpdateRequestsPerSecond = json.getInteger("requestsPerSecond", 100);
+            singlePolicyUpdateHostsWithPortAndProtocol = json.getJsonArray("singlePolicyUpdateHostsWithPortAndProtocol");
             singlePolicyUpdateHostsWithPortAndProtocol = json.getJsonArray("singlePolicyUpdateHostsWithPortAndProtocol");
             singlePolicyUpdateDurationInSeconds = json.getLong("singlePolicyUpdateDurationInSeconds");
-            singlePolicyUpdateOpenConnections.set(json.getInteger("singlePolicyUpdateOpenConnections"));
 
             vertx.setTimer(singlePolicyUpdateDurationInSeconds * 1000, doNothing -> {
                 System.out.println("*************************************************************************************");
