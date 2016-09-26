@@ -37,7 +37,7 @@ public class SendSinglePolicyUpdate extends AbstractVerticle {
         });
 
         vertx.setPeriodic(5000, doNothing -> {
-            if (HttpServer.startSinglePolicyUpdateStarted.get()) {
+            if (totalSinglePolicyRequests.get() > 0) {
                 System.out.println("\nSingle Policy Update to remote server = " + singlePolicyUpdateOpenConnections
                         + ". Total requests = " + totalSinglePolicyRequests + ". Success = " + successCount
                         + ". Requests/second = " + singlePolicyUpdateRequestsPerSecond
