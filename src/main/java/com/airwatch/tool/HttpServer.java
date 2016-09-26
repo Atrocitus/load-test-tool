@@ -48,6 +48,7 @@ public class HttpServer extends AbstractVerticle {
 
     public static Double rampUpTimeInSeconds;
     public static Long singlePolicyUpdateDurationInSeconds;
+    public static Long totalSinglePolicyUpdateRequestsToBeMade;
 
 
     public static int pingPercentage = 0;
@@ -215,19 +216,28 @@ public class HttpServer extends AbstractVerticle {
     }
 
     private void startSinglePolicyUpdate(final RoutingContext context) {
+        long timerId = -1L;
         if (startSinglePolicyUpdateSubmit.compareAndSet(false, true)) {
             JsonObject json = context.getBodyAsJson();
             singlePolicyUpdateRequestsPerSecond = json.getInteger("requestsPerSecond", 100);
             singlePolicyUpdateHostsWithPortAndProtocol = json.getJsonArray("singlePolicyUpdateHostsWithPortAndProtocol");
             singlePolicyUpdateHostsWithPortAndProtocol = json.getJsonArray("singlePolicyUpdateHostsWithPortAndProtocol");
             singlePolicyUpdateDurationInSeconds = json.getLong("singlePolicyUpdateDurationInSeconds");
-
-            vertx.setTimer(singlePolicyUpdateDurationInSeconds * 1000, doNothing -> {
-                System.out.println("*************************************************************************************");
-                System.out.println("Stopping Single Policy Update test to make any further request!!!");
-                System.out.println("*************************************************************************************");
-                startSinglePolicyUpdateSubmit.set(false);
-                startSinglePolicyUpdateStarted.set(false);
+            require(singlePolicyUpdateRequestsPerSecond > 0, "Requests per second should be greater than Zero.");
+            require(singlePolicyUpdateDurationInSeconds > 0, "Requests per second should be greater than Zero.");
+            totalSinglePolicyUpdateRequestsToBeMade = singlePolicyUpdateDurationInSeconds * singlePolicyUpdateRequestsPerSecond;
+            SendSinglePolicyUpdate.totalSinglePolicyRequests.set(0);
+            if (timerId > 0) {
+                vertx.cancelTimer(timerId);
+            }
+            timerId = vertx.setPeriodic(1000, nothing -> {
+                if (SendSinglePolicyUpdate.totalSinglePolicyRequests.get() < totalSinglePolicyUpdateRequestsToBeMade) {
+                    System.out.println("*************************************************************************************");
+                    System.out.println("Stopping Single Policy Update test to make any further request!!!");
+                    System.out.println("*************************************************************************************");
+                    startSinglePolicyUpdateSubmit.set(false);
+                    startSinglePolicyUpdateStarted.set(false);
+                }
             });
 
             startSinglePolicyUpdateStarted.set(true);

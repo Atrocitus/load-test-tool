@@ -9,8 +9,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static com.airwatch.tool.HttpServer.singlePolicyUpdateHostsWithPortAndProtocol;
-import static com.airwatch.tool.HttpServer.singlePolicyUpdateRequestsPerSecond;
+import static com.airwatch.tool.HttpServer.*;
 
 /**
  * Created by manishk on 7/1/16.
@@ -30,7 +29,9 @@ public class SendSinglePolicyUpdate extends AbstractVerticle {
         vertx.setPeriodic(1000, doNothing -> {
             if (HttpServer.startSinglePolicyUpdateStarted.get()) {
                 for (int index = 0; index < singlePolicyUpdateRequestsPerSecond; index++) {
-                    sendRequestToRemote();
+                    if (totalSinglePolicyRequests.get() < totalSinglePolicyUpdateRequestsToBeMade) {
+                        sendRequestToRemote();
+                    }
                 }
             }
         });
