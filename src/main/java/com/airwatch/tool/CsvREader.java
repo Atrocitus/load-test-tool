@@ -16,10 +16,10 @@ public class CsvReader {
     public static List<Device> createDevices() {
         List<List<String>> csvData = readRecords();
         return csvData.stream().map(attributes ->
-                new Device().setEasDeviceId(attributes.get(0))
+                new Device()
                         .setUserId(attributes.get(4))
-                        .setEasDeviceId(attributes.get(2))
-                        .setEasDeviceType(attributes.get(1)))
+                        .setEasDeviceId(attributes.get(1))
+                        .setEasDeviceType(attributes.get(2)))
                 .collect(Collectors.toList());
     }
 
