@@ -226,12 +226,13 @@ public class HttpServer extends AbstractVerticle {
             require(singlePolicyUpdateRequestsPerSecond > 0, "Requests per second should be greater than Zero.");
             require(singlePolicyUpdateDurationInSeconds > 0, "Requests per second should be greater than Zero.");
             totalSinglePolicyUpdateRequestsToBeMade = singlePolicyUpdateDurationInSeconds * singlePolicyUpdateRequestsPerSecond;
-            SendSinglePolicyUpdate.totalSinglePolicyRequests.set(0);
+            resetSinglePolicyUpdateStats();
+
             if (timerId > 0) {
                 vertx.cancelTimer(timerId);
             }
             timerId = vertx.setPeriodic(1000, nothing -> {
-                if (SendSinglePolicyUpdate.totalSinglePolicyRequests.get() < totalSinglePolicyUpdateRequestsToBeMade) {
+                if (SendSinglePolicyUpdate.totalSinglePolicyRequests.get() >= totalSinglePolicyUpdateRequestsToBeMade && startSinglePolicyUpdateStarted.get()) {
                     System.out.println("*************************************************************************************");
                     System.out.println("Stopping Single Policy Update test to make any further request!!!");
                     System.out.println("*************************************************************************************");
@@ -245,6 +246,13 @@ public class HttpServer extends AbstractVerticle {
         } else {
             context.response().setChunked(true).write("Single Policy Payload submit is already running!!!").end();
         }
+    }
+
+    private void resetSinglePolicyUpdateStats() {
+        SendSinglePolicyUpdate.totalSinglePolicyRequests.set(0);
+        SendSinglePolicyUpdate.successCount.set(0);
+        SendSinglePolicyUpdate.errorCount.set(0);
+        SendSinglePolicyUpdate.non200Responses.clear();
     }
 
     private void stopLoadTest(final RoutingContext context) {
