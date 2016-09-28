@@ -17,14 +17,14 @@ public class CsvReader {
         List<List<String>> csvData = readRecords();
         return csvData.stream().map(attributes ->
                 new Device()
-                        .setUserId(attributes.get(4))
-                        .setEasDeviceId(attributes.get(1))
-                        .setEasDeviceType(attributes.get(2)))
+                        .setEasDeviceId(attributes.get(0))
+                        .setEasDeviceType(attributes.get(1))
+                        .setUserId(attributes.get(2)))
                 .collect(Collectors.toList());
     }
 
     private static List<List<String>> readRecords() {
-        try (BufferedReader reader = new BufferedReader(new FileReader("devices.csv"))) {
+        try (BufferedReader reader = new BufferedReader(new FileReader("active-sync-data.csv"))) {
             return reader.lines()
                     .map(line -> Arrays.asList(line.split(",")))
                     .collect(Collectors.toList());
